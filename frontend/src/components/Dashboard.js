@@ -7,7 +7,7 @@ const Dashboard = () => {
   const cartes = [
     {
       titre: '📋 Gestion des questionnaires',
-      description: 'Créez et gérez vos tests HSE',
+      description: 'Créez et gérez vos tests Hygiéne Sécurité et Envirenement',
       lien: '/gestion',
       couleur: '#3498db'
     },
