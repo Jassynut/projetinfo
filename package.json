@@ -1,4 +1,5 @@
 {
+<<<<<<< HEAD
   "name": "projetinfo-root",
   "version": "1.0.0",
   "description": "HSE Management System - Django + React",
@@ -28,5 +29,13 @@
     "lucide-react": "0.554.0",
     "tailwind-merge": "3.4.0",
     "tailwindcss-animate": "1.0.7"
+=======
+  "devDependencies": {
+    "@babel/core": "^7.28.5",
+    "@babel/plugin-proposal-class-properties": "^7.18.6",
+    "@babel/preset-env": "^7.28.5",
+    "@babel/preset-react": "^7.28.5",
+    "babel-loader": "^10.0.0"
+>>>>>>> e6c3a406e42e952a97ca038274a784e7c63dc02d
   }
 }

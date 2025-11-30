@@ -1,8 +1,14 @@
 {
+<<<<<<< HEAD
   "name": "hse-frontend",
   "version": "1.0.0",
   "main": "index.js",
   "proxy": "http://localhost:8000",
+=======
+  "name": "frontend",
+  "version": "1.0.0",
+  "main": "index.js",
+>>>>>>> e6c3a406e42e952a97ca038274a784e7c63dc02d
   "scripts": {
     "start": "react-scripts start",
     "dev": "webpack --mode development --watch",
@@ -13,9 +19,15 @@
   "license": "ISC",
   "dependencies": {
     "react-router-dom": "^7.9.4",
+<<<<<<< HEAD
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "axios": "^1.6.0"
+=======
+    "save-dev": "^0.0.1-security",
+    "webpack": "^5.102.1",
+    "webpack-cli": "^6.0.1"
+>>>>>>> e6c3a406e42e952a97ca038274a784e7c63dc02d
   },
   "devDependencies": {
     "@babel/core": "^7.28.5",
@@ -23,8 +35,16 @@
     "@babel/preset-env": "^7.28.5",
     "@babel/preset-react": "^7.28.5",
     "babel-loader": "^10.0.0",
+<<<<<<< HEAD
     "react-scripts": "^5.0.1",
     "webpack": "^5.102.1",
     "webpack-cli": "^6.0.1"
   }
+=======
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-scripts": "^5.0.1"
+  },
+  "description": ""
+>>>>>>> e6c3a406e42e952a97ca038274a784e7c63dc02d
 }

@@ -20,12 +20,21 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
+<<<<<<< HEAD
 SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-w2(c2(oo-ad&=878nqa2)5f884t^4jj&je^-4rw+503l4-9p!f')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
 ALLOWED_HOSTS = ['localhost', '127.0.0.1', '*']
+=======
+SECRET_KEY = 'django-insecure-w2(c2(oo-ad&=878nqa2)5f884t^4jj&je^-4rw+503l4-9p!f'
+
+# SECURITY WARNING: don't run with debug turned on in production!
+DEBUG = True
+
+ALLOWED_HOSTS = []
+>>>>>>> e6c3a406e42e952a97ca038274a784e7c63dc02d
 
 
 # Application definition
@@ -38,18 +47,30 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+<<<<<<< HEAD
     'corsheaders',  # added CORS support for React frontend
     'backend.apps.BackendConfig',
     'hse_app.apps.Hse_appConfig',
     'certificats.apps.CertificatsConfig',
     'dashboard.apps.DashboardConfig',
     'tests.apps.TestsConfig',
+=======
+    'backend.apps.BackendConfig',
+    'frontend.apps.FrontendConfig',
+    'hse_app.apps.Hse_appConfig',
+    'certificats.apps.CertificatsConfig',
+    'dashboard.apps.DashboardConfig',
+    'test.apps.TestsConfig',
+>>>>>>> e6c3a406e42e952a97ca038274a784e7c63dc02d
     'users.apps.UsersConfig'
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+<<<<<<< HEAD
     'corsheaders.middleware.CorsMiddleware',  # added CORS middleware
+=======
+>>>>>>> e6c3a406e42e952a97ca038274a784e7c63dc02d
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -58,7 +79,11 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
+<<<<<<< HEAD
 ROOT_URLCONF = 'backend.urls'
+=======
+ROOT_URLCONF = 'projetinfo.urls'
+>>>>>>> e6c3a406e42e952a97ca038274a784e7c63dc02d
 
 TEMPLATES = [
     {
@@ -75,7 +100,11 @@ TEMPLATES = [
     },
 ]
 
+<<<<<<< HEAD
 WSGI_APPLICATION = 'backend.wsgi.application'
+=======
+WSGI_APPLICATION = 'projetinfo.wsgi.application'
+>>>>>>> e6c3a406e42e952a97ca038274a784e7c63dc02d
 
 
 # Database
@@ -84,15 +113,27 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
+<<<<<<< HEAD
         'NAME': os.getenv('DB_NAME', 'HSE_database'),
         'USER': os.getenv('DB_USER', 'root'),
         'PASSWORD': os.getenv('DB_PASSWORD', 'root'),
         'HOST': os.getenv('DB_HOST', 'localhost'),
         'PORT': os.getenv('DB_PORT', '3306'),
+=======
+        'NAME': 'HSE_database',
+        'USER': 'root',
+        'PASSWORD': 'root',
+        'HOST': 'localhost',
+        'PORT': '3306',
+>>>>>>> e6c3a406e42e952a97ca038274a784e7c63dc02d
     }
 }
 
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> e6c3a406e42e952a97ca038274a784e7c63dc02d
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
 
@@ -133,6 +174,7 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+<<<<<<< HEAD
 
 # CORS configuration for React frontend
 CORS_ALLOWED_ORIGINS = [
@@ -147,3 +189,5 @@ REST_FRAMEWORK = {
         'rest_framework.renderers.JSONRenderer',
     ],
 }
+=======
+>>>>>>> e6c3a406e42e952a97ca038274a784e7c63dc02d
