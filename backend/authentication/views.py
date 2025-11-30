@@ -155,6 +155,6 @@ def admin_users_list(request):
     """
     Liste tous les utilisateurs (admin seulement)
     """
-    users = CustomUser.objects.all().order_by('last_name', 'first_name')
+    users = CustomUser.objects.all().order_by('username')
     serializer = UserSerializer(users, many=True)
     return Response(serializer.data)

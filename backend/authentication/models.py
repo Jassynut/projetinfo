@@ -44,13 +44,6 @@ class CustomUserManager(BaseUserManager):
         return self.create_user(username, code_acces, **extra_fields)
 
 class CustomUser(AbstractBaseUser, PermissionsMixin):
-    DEPARTEMENT_CHOICES = [
-        ('manager_hse', 'Manager HSE'),
-        ('superviseur', 'Superviseur HSE'),
-        ('agent', 'Agent HSE'),
-        ('direction', 'Direction'),
-        ('contractant', 'Contractant'),
-    ]
     
     # === CHAMPS D'AUTHENTIFICATION ===
     username = models.CharField(
