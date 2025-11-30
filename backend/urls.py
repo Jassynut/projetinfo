@@ -19,13 +19,6 @@ from django.urls import path, include
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-<<<<<<< HEAD
     path('api/', include('hse_app.urls')),
     # React runs separately
 ]
-=======
-    path('api/', include('api.urls')),
-    path('',include('frontend.urls'))
-] #any domain.com/... is gonna be sent to api.urls which is the urls of the app api 
-#it can see what needs to be rendered
->>>>>>> e6c3a406e42e952a97ca038274a784e7c63dc02d

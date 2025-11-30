@@ -27,9 +27,6 @@ DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
 ALLOWED_HOSTS = ['localhost', '127.0.0.1', '*']
 
-
-# Application definition
-
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -38,13 +35,12 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
-    'corsheaders',  # added CORS support for React frontend
-    'backend.apps.BackendConfig',
-    'hse_app.apps.Hse_appConfig',
-    'certificats.apps.CertificatsConfig',
-    'dashboard.apps.DashboardConfig',
-    'tests.apps.TestsConfig',
-    'users.apps.UsersConfig'
+    'corsheaders',  # pour le frontend React
+    'backend.hse_app.apps.HseAppConfig',
+    'backend.certificats.apps.CertificatsConfig',
+    'backend.dashboard.apps.DashboardConfig',
+    'backend.tests.apps.TestsConfig',
+    'backend.users.apps.UsersConfig',
 ]
 
 MIDDLEWARE = [
