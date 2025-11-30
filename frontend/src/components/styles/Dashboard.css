@@ -1,0 +1,179 @@
+.dashboard-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 40px 20px;
+}
+
+.dashboard-intro {
+  text-align: center;
+  margin-bottom: 50px;
+  padding: 20px;
+  background: white;
+  border-left: 4px solid #10b981;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.dashboard-intro p {
+  color: #4b5563;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.dashboard-intro strong {
+  color: #10b981;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 25px;
+}
+
+.feature-card {
+  background: white;
+  border-radius: 12px;
+  padding: 30px;
+  text-align: center;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  transition: all 0.3s ease;
+  text-decoration: none;
+  border: 2px solid transparent;
+  border-left: 4px solid #10b981;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.feature-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+  border-left-color: #059669;
+}
+
+.feature-icon {
+  font-size: 40px;
+  margin-bottom: 15px;
+}
+
+.feature-card h3 {
+  color: #1f2937;
+  font-size: 18px;
+  margin-bottom: 10px;
+}
+
+.feature-card p {
+  color: #6b7280;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.dashboard-controls {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 40px 20px;
+}
+
+.dashboard-controls h2 {
+  color: #1f2937;
+  margin-bottom: 30px;
+}
+
+.date-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 30px;
+}
+
+.date-controls label {
+  color: #374151;
+  font-weight: 500;
+}
+
+.date-controls input {
+  width: 80px;
+  padding: 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+}
+
+.dashboard-charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+  gap: 25px;
+  margin-bottom: 40px;
+}
+
+.chart-card {
+  background: white;
+  padding: 30px;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+}
+
+.chart-card h3 {
+  color: #1f2937;
+  margin-bottom: 20px;
+  font-size: 16px;
+}
+
+.chart-display {
+  text-align: center;
+}
+
+.percentage {
+  font-size: 48px;
+  font-weight: bold;
+  color: #10b981;
+  margin-bottom: 10px;
+}
+
+.chart-display p {
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.comparison-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.chart-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.chart-item label {
+  color: #374151;
+  font-weight: 500;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.progress-bar {
+  height: 20px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: #10b981;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 8px;
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.comparison-chart > p {
+  color: #6b7280;
+  font-size: 13px;
+  text-align: center;
+  margin-top: 10px;
+}
