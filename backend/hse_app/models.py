@@ -7,16 +7,18 @@ import uuid
 # Utilisateur HSE
 # -----------------------------
 class HSEUser(models.Model):
-    employee_id = models.CharField(max_length=50, unique=True)
-    first_name = models.CharField(max_length=100)
-    last_name = models.CharField(max_length=100)
+    entite= models.CharField(max_length=100)
+    chef_projet_ocp=models.CharField(max_length=100)
+    nom = models.CharField(max_length=100)
+    prénom = models.CharField(max_length=100)
     email = models.EmailField(max_length=254)
-    department = models.CharField(max_length=100)
+    CIN = models.CharField(max_length=100)
+    entreprise = models.CharField(max_length=100)
     position = models.CharField(max_length=100)
-    created_at = models.DateTimeField(auto_now_add=True)
-
+    presence = models.BooleanField(default=False)
+    score=models.IntegerField(default=0)
     def __str__(self):
-        return f"{self.first_name} {self.last_name}"
+        return f"{self.nom} {self.prénom}"
 
 
 # -----------------------------
@@ -41,7 +43,6 @@ class TestSession(models.Model):
     session_code = models.CharField(max_length=50, unique=True, default='')
     qr_code = models.ImageField(upload_to='qr_codes/', blank=True, null=True)
     qr_code_data = models.CharField(max_length=255, blank=True)
-    is_active = models.BooleanField(default=False)
     start_time = models.DateTimeField(auto_now_add=True)
     end_time = models.DateTimeField(blank=True, null=True)
     test = models.ForeignKey(HSETest, on_delete=models.CASCADE)
