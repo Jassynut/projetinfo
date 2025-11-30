@@ -19,6 +19,9 @@ from django.urls import path, include
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api/', include('hse_app.urls')),
-    # React runs separately
+    path('hse/', include('backend.hse_app.urls')),
+    path('certificats/', include('backend.certificats.urls')),
+    path('dashboard/', include('backend.dashboard.urls')),
+    path('tests/', include('backend.tests.urls')),
+    path('users/', include('backend.users.urls')),
 ]
