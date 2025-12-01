@@ -15,28 +15,23 @@ class HSEUser(models.Model):
     nom = models.CharField(max_length=100, verbose_name="Nom")
     prénom = models.CharField(max_length=100, verbose_name="Prénom")
     email = models.EmailField(verbose_name="Adresse email")
-    CIN = models.CharField(max_length=20, unique=True, verbose_name="CIN")
-    téléphone = models.CharField(max_length=20, blank=True, verbose_name="Téléphone")
-    
+    CIN = models.CharField(max_length=20, unique=True, verbose_name="CIN")    
     # Informations professionnelles
     entite = models.CharField(max_length=100, verbose_name="Entité")
     entreprise = models.CharField(max_length=100, verbose_name="Entreprise")
-    position = models.CharField(max_length=100, verbose_name="Poste/Fonction")
     chef_projet_ocp = models.CharField(max_length=100, blank=True, verbose_name="Chef de projet OCP")
     
     # Statut et performance
     presence = models.BooleanField(default=False, verbose_name="Présent")
+    reussite = models.BooleanField(default=False, verbose_name="Réussi(e)")
     score = models.IntegerField(
         default=0,
-        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        validators=[MinValueValidator(0), MaxValueValidator(21)],
         verbose_name="Score global (%)"
     )
     
     
-    # Métadonnées
-    est_actif = models.BooleanField(default=True, verbose_name="Actif")
-    notes = models.TextField(blank=True, verbose_name="Notes supplémentaires")
-    
+    # Métadonnées    
     class Meta:
         verbose_name = "Utilisateur HSE"
         verbose_name_plural = "Utilisateurs HSE"
@@ -52,12 +47,7 @@ class HSEUser(models.Model):
     
     def get_full_name(self):
         return f"{self.prénom} {self.nom}"
-    
-    @property
-    def tests_completes(self):
-        """Nombre de tests complétés par cet utilisateur"""
-        return self.testattempt_set.filter(completed_at__isnull=False).count()
-    
+
     @property
     def taux_reussite(self):
         """Taux de réussite global de l'utilisateur"""
@@ -67,51 +57,92 @@ class HSEUser(models.Model):
         reussis = attempts.filter(passed=True).count()
         return round((reussis / attempts.count()) * 100, 1)
 
+from django.db import models
+from django.core.validators import MinValueValidator, MaxValueValidator
+from django.conf import settings
+from django.utils.translation import gettext_lazy as _
 
 class HSETest(models.Model):
     """Test HSE avec questions et paramètres"""
     
-    # Informations de base
-    title = models.CharField(max_length=200, verbose_name="Titre du test")
-    description = models.TextField(verbose_name="Description")
+    # Version du test (1 à 6)
+    VERSION_CHOICES = [
+        (1, 'Version 1'),
+        (2, 'Version 2'),
+        (3, 'Version 3'),
+        (4, 'Version 4'),
+        (5, 'Version 5'),
+        (6, 'Version 6'),
+    ]
+    
+    version = models.IntegerField(
+        choices=VERSION_CHOICES,
+        verbose_name="Version du test",
+        unique=True,
+        validators=[MinValueValidator(1), MaxValueValidator(6)]
+    )
+    
+    description = models.TextField(verbose_name="Description", blank=True)
     
     # Paramètres du test
     duration_minutes = models.IntegerField(
-        default=30,
-        validators=[MinValueValidator(5), MaxValueValidator(180)],
-        verbose_name="Durée (minutes)"
+        default=10,
+        verbose_name="Durée (minutes)",
+        validators=[MinValueValidator(1)]
     )
     passing_score = models.IntegerField(
-        default=70,
+        default=0,
         validators=[MinValueValidator(0), MaxValueValidator(100)],
         verbose_name="Score de passage (%)"
     )
     
+    # Ordre des questions pour cette version
+    ordre_questions = models.JSONField(
+        verbose_name="Ordre des questions",
+        help_text="Liste des IDs de questions dans l'ordre spécifique à cette version"
+    )
     
-    # Statut et visibilité
+    # Métadonnées
     is_active = models.BooleanField(default=True, verbose_name="Actif")
-    
-    
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Date de création")
-    
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="Dernière modification")
     
     class Meta:
         verbose_name = "Test HSE"
         verbose_name_plural = "Tests HSE"
-        ordering = ['ordre_affichage', 'title']
+        ordering = ['version']
         indexes = [
-            models.Index(fields=['categorie']),
-            models.Index(fields=['niveau_difficulte']),
             models.Index(fields=['is_active']),
+            models.Index(fields=['version']),
         ]
     
     def __str__(self):
-        return f"{self.title} ({self.get_categorie_display()})"
+        return f"Test HSE - Version {self.version}"
     
     @property
     def questions_count(self):
         """Nombre de questions dans ce test"""
-        return self.questions.count()
+        return len(self.ordre_questions) if self.ordre_questions else 0
+    
+    def get_questions_in_order(self):
+        """Récupère les questions dans l'ordre spécifié"""
+        if not self.ordre_questions:
+            return HSEQuestion.objects.none()
+        
+        # Crée un dictionnaire pour préserver l'ordre
+        question_dict = {}
+        questions = HSEQuestion.objects.filter(id__in=self.ordre_questions)
+        
+        for question in questions:
+            question_dict[str(question.id)] = question
+        
+        # Retourne les questions dans l'ordre spécifié
+        ordered_questions = []
+        for qid in self.ordre_questions:
+            if str(qid) in question_dict:
+                ordered_questions.append(question_dict[str(qid)])
+        
+        return ordered_questions
     
     @property
     def taux_reussite_global(self):
@@ -125,423 +156,294 @@ class HSETest(models.Model):
     @property
     def score_moyen(self):
         """Score moyen des participants"""
-        from django.db.models import Avg
         result = self.testattempt_set.filter(
             completed_at__isnull=False
-        ).aggregate(avg_score=Avg('score'))
+        ).aggregate(avg_score=models.Avg('score'))
         return round(result['avg_score'] or 0, 1)
 
 
-class TestSession(models.Model):
-    """Session de test avec QR Code"""
-    STATUT_SESSION = [
-        ('planifiee', 'Planifiée'),
-        ('en_cours', 'En cours'),
-        ('terminee', 'Terminée'),
-        ('annulee', 'Annulée'),
+class HSEQuestion(models.Model):
+    """Question individuelle pour les tests HSE (Vrai/Faux uniquement)"""
+    
+    DIFFICULTY_CHOICES = [
+        ('facile', 'Facile'),
+        ('moyen', 'Moyen'),
+        ('difficile', 'Difficile'),
     ]
     
-    # Identification
-    session_code = models.CharField(
-        max_length=50,
-        unique=True,
-        verbose_name="Code de session"
+    CATEGORY_CHOICES = [
+        ('securite', 'Sécurité'),
+        ('sante', 'Santé'),
+        ('environnement', 'Environnement'),
+        ('general', 'Général'),
+    ]
+    
+    # Énoncé de la question en trois langues
+    enonce_fr = models.TextField(verbose_name="Énoncé (Français)")
+    enonce_en = models.TextField(verbose_name="Énoncé (Anglais)", blank=True)
+    enonce_es = models.TextField(verbose_name="Énoncé (Espagnol)", blank=True)
+    
+    # Réponse correcte (Vrai/Faux)
+    reponse_correcte = models.BooleanField(
+        verbose_name="Réponse correcte",
+        help_text="Cochez si la réponse correcte est VRAI"
     )
     
-    # QR Code
-    qr_code = models.ImageField(
-        upload_to='qr_codes/',
+    # Catégorie et difficulté
+    categorie = models.CharField(
+        max_length=20,
+        choices=CATEGORY_CHOICES,
+        default='general',
+        verbose_name="Catégorie"
+    )
+    niveau_difficulte = models.CharField(
+        max_length=20,
+        choices=DIFFICULTY_CHOICES,
+        default='moyen',
+        verbose_name="Niveau de difficulté"
+    )
+    
+    # Points
+    points = models.IntegerField(
+        default=1,
+        validators=[MinValueValidator(1)],
+        verbose_name="Points pour bonne réponse"
+    )
+    
+    # Image optionnelle
+    image = models.ImageField(
+        upload_to='questions/hse/',
+        verbose_name="Image d'illustration",
         blank=True,
         null=True,
-        verbose_name="QR Code"
-    )
-    qr_code_data = models.CharField(
-        max_length=500,
-        blank=True,
-        verbose_name="Données du QR Code"
+        help_text="Image optionnelle pour illustrer la question"
     )
     
-    # Paramètres temporels
-    start_time = models.DateTimeField(
-        default=timezone.now,
-        verbose_name="Heure de début"
-    )
-    end_time = models.DateTimeField(
+    # Explication en trois langues
+    explanation_fr = models.TextField(
+        verbose_name="Explication (Français)",
         blank=True,
-        null=True,
-        verbose_name="Heure de fin"
+        help_text="Explication de la réponse correcte"
+    )
+    explanation_en = models.TextField(
+        verbose_name="Explication (Anglais)",
+        blank=True,
+        help_text="Explication de la réponse correcte"
+    )
+    explanation_es = models.TextField(
+        verbose_name="Explication (Espagnol)",
+        blank=True,
+        help_text="Explication de la réponse correcte"
     )
     
-    # Relations
-    test_id = models.ForeignKey(
+    # Métadonnées
+    is_active = models.BooleanField(default=True, verbose_name="Active")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Date de création")
+    
+    # Relation avec les tests
+    tests = models.ManyToManyField(
         HSETest,
-        on_delete=models.CASCADE,
-        verbose_name="Test associé"
+        through='TestQuestionOrder',
+        related_name='questions',
+        blank=True
     )
-    
-
-    
     
     class Meta:
-        verbose_name = "Session de test"
-        verbose_name_plural = "Sessions de test"
-        ordering = ['-start_time']
+        verbose_name = "Question HSE"
+        verbose_name_plural = "Questions HSE"
+        ordering = ['categorie', 'niveau_difficulte', 'created_at']
         indexes = [
-            models.Index(fields=['session_code']),
-            models.Index(fields=['start_time']),
-            models.Index(fields=['statut']),
+            models.Index(fields=['categorie']),
+            models.Index(fields=['niveau_difficulte']),
+            models.Index(fields=['is_active']),
+            models.Index(fields=['reponse_correcte']),
         ]
     
     def __str__(self):
-        return f"Session {self.session_code} - {self.test.title}"
+        return f"Q{self.id}: {self.enonce_fr[:50]}... ({self.get_categorie_display()})"
     
-    def save(self, *args, **kwargs):
-        """Génère un code de session unique si non fourni"""
-        if not self.session_code:
-            self.session_code = f"SES-{uuid.uuid4().hex[:8].upper()}"
-        super().save(*args, **kwargs)
+    def get_enonce(self, langue='fr'):
+        """Retourne l'énoncé dans la langue spécifiée"""
+        lang_map = {
+            'fr': self.enonce_fr,
+            'en': self.enonce_en,
+            'es': self.enonce_es
+        }
+        return lang_map.get(langue, self.enonce_fr)
+    
+    def get_explanation(self, langue='fr'):
+        """Retourne l'explication dans la langue spécifiée"""
+        lang_map = {
+            'fr': self.explanation_fr,
+            'en': self.explanation_en,
+            'es': self.explanation_es
+        }
+        return lang_map.get(langue, self.explanation_fr)
+    
+    def check_answer(self, user_answer):
+        """Vérifie si la réponse de l'utilisateur est correcte"""
+        # Convertir la réponse de l'utilisateur en booléen
+        if isinstance(user_answer, str):
+            user_answer = user_answer.lower().strip()
+            if user_answer in ['vrai', 'true', 'verdadero', '1', 'yes', 'oui']:
+                user_bool = True
+            elif user_answer in ['faux', 'false', 'falso', '0', 'no', 'non']:
+                user_bool = False
+            else:
+                # Si on ne peut pas convertir, retourner False
+                return False
+        elif isinstance(user_answer, int):
+            user_bool = bool(user_answer)
+        else:
+            user_bool = bool(user_answer)
+        
+        return user_bool == self.reponse_correcte
     
     @property
-    def duree_reelle(self):
-        """Calcule la durée réelle de la session"""
-        if self.start_time and self.end_time:
-            return self.end_time - self.start_time
-        return None
-    
-    @property
-    def participants_actuels(self):
-        """Nombre de participants ayant commencé le test"""
-        return self.testattempt_set.count()
-    
-    @property
-    def est_en_cours(self):
-        """Vérifie si la session est en cours"""
-        return self.statut == 'en_cours'
+    def reponse_correcte_display(self):
+        """Retourne la réponse correcte sous forme de texte"""
+        return "Vrai" if self.reponse_correcte else "Faux"
 
 
-class TestQuestion(models.Model):
-    """Question d'un test HSE"""
-    TYPE_QUESTION = [
-        ('multiple_choice', 'Choix multiple'),
-        ('single_choice', 'Choix unique'),
-        ('true_false', 'Vrai/Faux'),
-        ('short_answer', 'Réponse courte'),
-        ('matching', 'Appariement'),
-    ]
+class TestQuestionOrder(models.Model):
+    """Table intermédiaire pour gérer l'ordre des questions dans chaque test"""
     
-    # Contenu de la question
-    test = models.ForeignKey(
-        HSETest,
-        on_delete=models.CASCADE,
-        related_name='questions',
-        verbose_name="Test"
-    )
-    question_text = models.TextField(verbose_name="Question")
-    question_type = models.CharField(
-        max_length=20,
-        choices=TYPE_QUESTION,
-        default='multiple_choice',
-        verbose_name="Type de question"
-    )
-    # Métadonnées
-    image_question = models.ImageField(
-        upload_to='questions/',
-        blank=True,
-        null=True,
-        verbose_name="Image illustrative"
-    )
-    
-    tags = models.CharField(
-        max_length=200,
-        blank=True,
-        verbose_name="Tags"
+    test = models.ForeignKey(HSETest, on_delete=models.CASCADE)
+    question = models.ForeignKey(HSEQuestion, on_delete=models.CASCADE)
+    order = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Ordre d'affichage"
     )
     
     class Meta:
-        verbose_name = "Question de test"
-        verbose_name_plural = "Questions de test"
-        ordering = ['test', 'ordre']
-        unique_together = ['test', 'ordre']
+        ordering = ['test', 'order']
+        unique_together = ['test', 'question']
+        verbose_name = "Ordre des questions"
+        verbose_name_plural = "Ordres des questions"
     
     def __str__(self):
-        return f"Q{self.ordre}: {self.question_text[:50]}..."
-
-
-class QuestionOption(models.Model):
-    """Option de réponse pour une question"""
-    question = models.ForeignKey(
-        TestQuestion,
-        on_delete=models.CASCADE,
-        related_name='options',
-        verbose_name="Question"
-    )
-    option_text = models.CharField(max_length=500, verbose_name="Option")
-    is_correct = models.BooleanField(default=False, verbose_name="Correcte")
-    ordre = models.PositiveIntegerField(default=0, verbose_name="Ordre")
-    
-    # Pour les questions d'appariement
-    option_groupe = models.CharField(
-        max_length=50,
-        blank=True,
-        verbose_name="Groupe d'option"
-    )
-    
-    class Meta:
-        verbose_name = "Option de question"
-        verbose_name_plural = "Options de question"
-        ordering = ['question', 'ordre']
-    
-    def __str__(self):
-        statut = "✓" if self.is_correct else "✗"
-        return f"{statut} {self.option_text[:30]}..."
+        return f"Version {self.test.version} - Question {self.order}: Q{self.question.id}"
 
 
 class TestAttempt(models.Model):
     """Tentative de test par un utilisateur"""
-    STATUT_TENTATIVE = [
-        ('en_cours', 'En cours'),
-        ('termine', 'Terminé'),
-        ('abandonne', 'Abandonné'),
-        ('expire', 'Expiré'),
-    ]
     
-    # Relations
+    test = models.ForeignKey(HSETest, on_delete=models.CASCADE)
     user = models.ForeignKey(
-        HSEUser,
+        settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         verbose_name="Utilisateur"
     )
-    session = models.ForeignKey(
-        TestSession,
-        on_delete=models.CASCADE,
-        verbose_name="Session"
+    
+    # Langue utilisée pour passer le test
+    langue = models.CharField(
+        max_length=2,
+        choices=[
+            ('fr', 'Français'),
+            ('en', 'Anglais'),
+            ('es', 'Espagnol'),
+        ],
+        default='fr',
+        verbose_name="Langue du test"
     )
     
-    # Performance
+    # Résultats
     score = models.FloatField(
         default=0,
-        validators=[MinValueValidator(0), MaxValueValidator(100)],
-        verbose_name="Score (%)"
+        verbose_name="Score obtenu"
     )
-    points_obtenus = models.IntegerField(default=0, verbose_name="Points obtenus")
-    points_max = models.IntegerField(default=0, verbose_name="Points maximum")
-    
-    # Statut
+    max_score = models.FloatField(
+        verbose_name="Score maximum possible"
+    )
+    percentage = models.FloatField(
+        verbose_name="Pourcentage",
+        validators=[MinValueValidator(0), MaxValueValidator(100)]
+    )
     passed = models.BooleanField(default=False, verbose_name="Réussi")
-    statut = models.CharField(
-        max_length=20,
-        choices=STATUT_TENTATIVE,
-        default='en_cours',
-        verbose_name="Statut"
+    
+    # Détail des réponses
+    correct_answers = models.IntegerField(
+        default=0,
+        verbose_name="Nombre de bonnes réponses"
+    )
+    wrong_answers = models.IntegerField(
+        default=0,
+        verbose_name="Nombre de mauvaises réponses"
     )
     
-    # Temps
+    # Métadonnées de la tentative
     started_at = models.DateTimeField(auto_now_add=True, verbose_name="Débuté à")
     completed_at = models.DateTimeField(
-        blank=True,
         null=True,
+        blank=True,
         verbose_name="Terminé à"
     )
-    temps_passe = models.DurationField(
-        blank=True,
-        null=True,
-        verbose_name="Temps passé"
+    time_taken_seconds = models.IntegerField(
+        default=0,
+        verbose_name="Temps pris (secondes)"
     )
     
-    # Certificat
-    certificate_generated = models.BooleanField(
-        default=False,
-        verbose_name="Certificat généré"
+    # Réponses de l'utilisateur
+    user_answers = models.JSONField(
+        verbose_name="Réponses de l'utilisateur",
+        default=dict,
+        help_text="Format: {question_id: réponse_vrai_faux, ...}"
     )
-    certificate_file = models.FileField(
-        upload_to='certificats/',
-        blank=True,
-        null=True,
-        verbose_name="Fichier du certificat"
-    )
-    numero_certificat = models.CharField(
-        max_length=100,
-        blank=True,
-        verbose_name="Numéro de certificat"
-    )
-    
-    # Métadonnées
-    ip_address = models.GenericIPAddressField(
-        blank=True,
-        null=True,
-        verbose_name="Adresse IP"
-    )
-    user_agent = models.TextField(blank=True, verbose_name="Navigateur")
     
     class Meta:
         verbose_name = "Tentative de test"
         verbose_name_plural = "Tentatives de test"
         ordering = ['-started_at']
         indexes = [
-            models.Index(fields=['user', 'session']),
-            models.Index(fields=['started_at']),
+            models.Index(fields=['user', 'test']),
+            models.Index(fields=['completed_at']),
             models.Index(fields=['passed']),
+            models.Index(fields=['langue']),
         ]
     
     def __str__(self):
-        return f"Tentative {self.id} - {self.user} - {self.session.test.title}"
+        return f"{self.user.username} - Version {self.test.version} ({self.percentage}%)"
     
-    def calculer_score(self):
+    def calculate_score(self):
         """Calcule le score basé sur les réponses"""
-        reponses = self.answers.filter(is_correct=True)
-        total_points = sum(reponse.question.points for reponse in reponses)
-        points_max = sum(question.points for question in self.session.test.questions.all())
+        total_points = 0
+        earned_points = 0
+        correct = 0
+        wrong = 0
         
-        if points_max > 0:
-            self.points_obtenus = total_points
-            self.points_max = points_max
-            self.score = (total_points / points_max) * 100
-            self.passed = self.score >= self.session.test.passing_score
-    
-    @property
-    def duree_totale(self):
-        """Calcule la durée totale de la tentative"""
-        if self.started_at and self.completed_at:
-            return self.completed_at - self.started_at
-        return None
-    
-    @property
-    def pourcentage_reussite(self):
-        """Pourcentage de réponses correctes"""
-        total_reponses = self.answers.count()
-        if total_reponses == 0:
-            return 0
-        reponses_correctes = self.answers.filter(is_correct=True).count()
-        return round((reponses_correctes / total_reponses) * 100, 1)
-
-
-class Answer(models.Model):
-    """Réponse d'un utilisateur à une question"""
-    test_attempt = models.ForeignKey(
-        TestAttempt,
-        on_delete=models.CASCADE,
-        related_name='answers',
-        verbose_name="Tentative de test"
-    )
-    question = models.ForeignKey(
-        TestQuestion,
-        on_delete=models.CASCADE,
-        verbose_name="Question"
-    )
-    
-    # Réponse
-    answer_text = models.TextField(
-        blank=True,
-        null=True,
-        verbose_name="Réponse texte"
-    )
-    selected_options = models.ManyToManyField(
-        QuestionOption,
-        blank=True,
-        verbose_name="Options sélectionnées"
-    )
-    
-    # Évaluation
-    is_correct = models.BooleanField(default=False, verbose_name="Correcte")
-    points_obtenus = models.IntegerField(default=0, verbose_name="Points obtenus")
-    
-    # Temps
-    temps_reponse = models.DurationField(
-        blank=True,
-        null=True,
-        verbose_name="Temps de réponse"
-    )
-    
-    class Meta:
-        verbose_name = "Réponse"
-        verbose_name_plural = "Réponses"
-        ordering = ['test_attempt']
-        unique_together = ['test_attempt', 'question']
-    
-    def __str__(self):
-        return f"Réponse {self.id} - {self.question.question_text[:30]}..."
-    
-    def evaluer_reponse(self):
-        """Évalue si la réponse est correcte"""
-        if self.question.question_type in ['multiple_choice', 'single_choice']:
-            reponses_correctes = set(self.question.options.filter(is_correct=True))
-            reponses_utilisateur = set(self.selected_options.all())
-            self.is_correct = reponses_correctes == reponses_utilisateur
-        elif self.question.question_type == 'true_false':
-            # Implémentation pour Vrai/Faux
-            pass
+        for qid, user_answer in self.user_answers.items():
+            try:
+                question = HSEQuestion.objects.get(id=qid)
+                total_points += question.points
+                
+                if question.check_answer(user_answer):
+                    earned_points += question.points
+                    correct += 1
+                else:
+                    wrong += 1
+            except HSEQuestion.DoesNotExist:
+                continue
         
-        if self.is_correct:
-            self.points_obtenus = self.question.points
-        else:
-            self.points_obtenus = 0
-
-
-# =============================================================================
-# MODÈLES DE SUPPORT
-# =============================================================================
-
-class TestCategory(models.Model):
-    """Catégories de tests HSE"""
-    nom = models.CharField(max_length=100, unique=True, verbose_name="Nom")
-    description = models.TextField(blank=True, verbose_name="Description")
-    couleur = models.CharField(max_length=7, default='#007bff', verbose_name="Couleur")
-    icone = models.CharField(max_length=50, blank=True, verbose_name="Icône")
-    ordre = models.IntegerField(default=0, verbose_name="Ordre")
+        self.score = earned_points
+        self.max_score = total_points if total_points > 0 else 1
+        self.percentage = round((earned_points / self.max_score) * 100, 2)
+        self.passed = self.percentage >= self.test.passing_score
+        self.correct_answers = correct
+        self.wrong_answers = wrong
+        
+        self.save()
+        return self.score, self.percentage
     
-    class Meta:
-        verbose_name = "Catégorie de test"
-        verbose_name_plural = "Catégories de test"
-        ordering = ['ordre', 'nom']
-    
-    def __str__(self):
-        return self.nom
-
-
-class TestTag(models.Model):
-    """Tags pour organiser les tests"""
-    nom = models.CharField(max_length=50, unique=True, verbose_name="Nom")
-    description = models.TextField(blank=True, verbose_name="Description")
-    
-    class Meta:
-        verbose_name = "Tag de test"
-        verbose_name_plural = "Tags de test"
-    
-    def __str__(self):
-        return self.nom
-
-
-class UserProgress(models.Model):
-    """Suivi de progression des utilisateurs"""
-    user = models.ForeignKey(
-        HSEUser,
-        on_delete=models.CASCADE,
-        verbose_name="Utilisateur"
-    )
-    test = models.ForeignKey(
-        HSETest,
-        on_delete=models.CASCADE,
-        verbose_name="Test"
-    )
-    dernier_score = models.FloatField(
-        validators=[MinValueValidator(0), MaxValueValidator(100)],
-        verbose_name="Dernier score"
-    )
-    meilleur_score = models.FloatField(
-        validators=[MinValueValidator(0), MaxValueValidator(100)],
-        verbose_name="Meilleur score"
-    )
-    tentatives = models.IntegerField(default=0, verbose_name="Nombre de tentatives")
-    termine = models.BooleanField(default=False, verbose_name="Terminé")
-    date_derniere_tentative = models.DateTimeField(
-        auto_now=True,
-        verbose_name="Dernière tentative"
-    )
-    
-    class Meta:
-        verbose_name = "Progression utilisateur"
-        verbose_name_plural = "Progressions utilisateur"
-        unique_together = ['user', 'test']
-    
-    def __str__(self):
-        return f"Progression {self.user} - {self.test}"
+    def get_question_detail(self, question_id, language='fr'):
+        """Récupère les détails d'une question avec la langue spécifiée"""
+        try:
+            question = HSEQuestion.objects.get(id=question_id)
+            return {
+                'id': question.id,
+                'enonce': question.get_enonce(language),
+                'explication': question.get_explanation(language),
+                'reponse_correcte': question.reponse_correcte_display,
+                'image_url': question.image.url if question.image else None,
+            }
+        except HSEQuestion.DoesNotExist:
+            return None
