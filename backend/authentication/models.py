@@ -42,11 +42,3 @@ class TestUser(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self):
         return f"{self.full_name} - {self.cin}"
-
-    def generate_qr_code(self):
-        """Génère le QR code basé sur le CIN"""
-        data = self.cin
-        img = qrcode.make(data)
-        buffer = BytesIO()
-        img.save(buffer, format='PNG')
-        self.qr_code.save(f"{self.cin}.png", File(buffer), save=False)
