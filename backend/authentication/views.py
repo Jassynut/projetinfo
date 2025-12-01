@@ -4,7 +4,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from django.contrib.auth import login, logout
 from django.utils import timezone
-from .models import CustomUser, LoginSession
+from .models import TestUserManager, LoginSession
 from .serializers import LoginSerializer, UserSerializer, ChangeAccessCodeSerializer, CreateUserSerializer
 
 def get_client_ip(request):
@@ -51,8 +51,8 @@ def login_view(request):
     username = request.data.get('username', '')
     if username:
         try:
-            user = CustomUser.objects.get(username=username)
-        except CustomUser.DoesNotExist:
+            user = TestUserManager.objects.get(username=username)
+        except TestUserManager.DoesNotExist:
             user = None
         
         LoginSession.objects.create(
@@ -155,6 +155,6 @@ def admin_users_list(request):
     """
     Liste tous les utilisateurs (admin seulement)
     """
-    users = CustomUser.objects.all().order_by('username')
+    users = TestUserManager.objects.all().order_by('username')
     serializer = UserSerializer(users, many=True)
     return Response(serializer.data)

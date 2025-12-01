@@ -1,7 +1,7 @@
 # serializers.py
 from rest_framework import serializers
 from django.contrib.auth import authenticate
-from .models import CustomUser
+from .models import TestUserManager
 
 class LoginSerializer(serializers.Serializer):
     username = serializers.CharField()
@@ -13,12 +13,12 @@ class LoginSerializer(serializers.Serializer):
         
         if username and code_acces:
             try:
-                user = CustomUser.objects.get(username=username, is_active=True)
+                user = TestUserManager.objects.get(username=username, is_active=True)
                 if user.authenticate(code_acces):
                     data['user'] = user
                 else:
                     raise serializers.ValidationError("Code d'accès incorrect")
-            except CustomUser.DoesNotExist:
+            except TestUserManager.DoesNotExist:
                 raise serializers.ValidationError("Nom d'utilisateur incorrect")
         else:
             raise serializers.ValidationError("Must include username and code_acces")
@@ -27,5 +27,5 @@ class LoginSerializer(serializers.Serializer):
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
-        model = CustomUser
+        model = TestUserManager
         fields = ('id', 'username', 'poste')

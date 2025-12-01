@@ -1,7 +1,7 @@
 # authentication/serializers.py
 from rest_framework import serializers
 from django.contrib.auth import authenticate as django_authenticate
-from .models import CustomUser, LoginSession
+from .models import TestUserManager, LoginSession
 
 class LoginSerializer(serializers.Serializer):
     username = serializers.CharField(
@@ -29,7 +29,7 @@ class LoginSerializer(serializers.Serializer):
             })
         
         try:
-            user = CustomUser.objects.get(username=username)
+            user = TestUserManager.objects.get(username=username)
             
             if not user.is_active:
                 raise serializers.ValidationError({
@@ -43,7 +43,7 @@ class LoginSerializer(serializers.Serializer):
                 
             data['user'] = user
             
-        except CustomUser.DoesNotExist:
+        except TestUserManager.DoesNotExist:
             raise serializers.ValidationError({
                 'error': 'Nom d\'utilisateur incorrect'
             })
@@ -56,7 +56,7 @@ class UserSerializer(serializers.ModelSerializer):
     site_display = serializers.SerializerMethodField()
     
     class Meta:
-        model = CustomUser
+        model = TestUserManager
         fields = [
             'id',
             'username',
@@ -116,7 +116,7 @@ class ChangeAccessCodeSerializer(serializers.Serializer):
 
 class CreateUserSerializer(serializers.ModelSerializer):
     class Meta:
-        model = CustomUser
+        model = TestUserManager
         fields = [
             'username', 
             'code_acces',
@@ -130,6 +130,6 @@ class CreateUserSerializer(serializers.ModelSerializer):
         }
     
     def validate_username(self, value):
-        if CustomUser.objects.filter(username=value.lower()).exists():
+        if TestUserManager.objects.filter(username=value.lower()).exists():
             raise serializers.ValidationError("Ce nom d'utilisateur est déjà utilisé")
         return value.lower()

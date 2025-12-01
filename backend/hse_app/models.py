@@ -2,7 +2,7 @@ from django.db import models
 from django.utils import timezone
 from django.core.validators import MinValueValidator, MaxValueValidator
 import uuid
-from backend.authentication.models import CustomUser
+from backend.authentication.models import TestUserManager
 from django.core.files import File
 from io import BytesIO
 # =============================================================================

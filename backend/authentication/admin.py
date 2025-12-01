@@ -1,17 +1,17 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import CustomUser, LoginSession, AccessCodeHistory
+from .models import TestUserManager, LoginSession, AccessCodeHistory
 
-# Si le CustomUser n'est pas encore enregistré, on ignore l'erreur
+# Si le TestUserManager n'est pas encore enregistré, on ignore l'erreur
 try:
-    admin.site.unregister(CustomUser)
+    admin.site.unregister(TestUserManager)
 except admin.sites.NotRegistered:
     pass
 
-# --- CustomUserAdmin unique ---
-@admin.register(CustomUser)
-class CustomUserAdmin(UserAdmin):
-    model = CustomUser
+# --- TestUserManagerAdmin unique ---
+@admin.register(TestUserManager)
+class TestUserManagerAdmin(UserAdmin):
+    model = TestUserManager
 
     # Colonnes affichées dans la liste
     list_display = ['username', 'is_active', 'last_login', 'poste']
