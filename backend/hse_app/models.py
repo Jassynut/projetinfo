@@ -3,7 +3,9 @@ from django.utils import timezone
 from django.core.validators import MinValueValidator, MaxValueValidator
 import uuid
 from backend.authentication.models import CustomUser
-
+import qrcode
+from django.core.files import File
+from io import BytesIO
 # =============================================================================
 # MODÈLES PRINCIPAUX HSE
 # =============================================================================
@@ -414,6 +416,12 @@ class TestAttempt(models.Model):
         default=dict,
         help_text="Format: {question_id: {'answer': bool, 'is_mandatory': bool}}"
     )
+    qr_code = models.ImageField(
+        upload_to='attempt_qrcodes/',
+        null=True,
+        blank=True,
+        verbose_name="QR Code de la session"
+    )
     
     class Meta:
         verbose_name = "Tentative de test"
@@ -430,7 +438,17 @@ class TestAttempt(models.Model):
     
     def __str__(self):
         return f"{self.user.username} - V{self.test.version} - {self.get_status_display()}"
-    
+    def generate_qr_code(self):
+        """Génère un QR code contenant les infos de cette tentative"""
+        qr_content = f"attempt:{self.id}|user:{self.user_id}|test:{self.test_id}"
+
+        qr_image = qrcode.make(qr_content)
+
+        buffer = BytesIO()
+        qr_image.save(buffer, format="PNG")
+        file_name = f"attempt_{self.id}.png"
+
+        self.qr_code.save(file_name, File(buffer), save=False)
 def calculate_scores_simple(self):
     """Version ultra-simple : scores bruts seulement"""
     mandatory_correct = 0
