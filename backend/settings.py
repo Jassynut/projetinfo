@@ -112,7 +112,11 @@ AUTH_PASSWORD_VALIDATORS = [
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
     },
 ]
-
+AUTHENTICATION_BACKENDS = [
+    'test_app.backends.HSEUserBackend',      # Auth HSE User (CIN seul)
+    'test_app.backends.HSEManagerBackend',   # Auth Manager (full_name + CIN)
+    'django.contrib.auth.backends.ModelBackend',  # Admin Django
+]
 # Modèle utilisateur personnalisé
 AUTH_USER_MODEL = 'authentication.TestUser'
 
