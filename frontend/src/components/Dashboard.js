@@ -1,9 +1,9 @@
-// frontend/src/components/Dashboard.js
+// frontend/src/components/stats.js
 import React from 'react';
 import { Link } from 'react-router-dom';
-import './Dashboard.css';
+import './stats.css';
 
-const Dashboard = () => {
+const stats = () => {
   const cartes = [
     {
       titre: '📋 Gestion des questionnaires',
@@ -26,15 +26,15 @@ const Dashboard = () => {
   ];
 
   return (
-    <div className="dashboard-container">
+    <div className="stats-container">
       <h1>Tableau de bord HSE</h1>
       <p style={{textAlign: 'center', color: '#7f8c8d', marginBottom: '40px'}}>
         Bienvenue sur votre plateforme de formation et certification HSE
       </p>
       
-      <div className="dashboard-grid">
+      <div className="stats-grid">
         {cartes.map((carte, index) => (
-          <div key={index} className="dashboard-card">
+          <div key={index} className="stats-card">
             <div className="card-icon">{carte.titre.split(' ')[0]}</div>
             <h3>{carte.titre}</h3>
             <p>{carte.description}</p>
@@ -53,7 +53,7 @@ const Dashboard = () => {
 };
 
 <<<<<<< HEAD
-export default Dashboard;
+export default stats;
 =======
-export default Dashboard;
+export default stats;
 >>>>>>> e6c3a406e42e952a97ca038274a784e7c63dc02d

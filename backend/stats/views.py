@@ -14,7 +14,7 @@ def hse_dashboard(request):
         'page_title': 'Induction HSE - Jorf Lasfar',
         'year': 2025
     }
-    return render(request, 'hse/dashboard.html', context)
+    return render(request, 'hse/stats.html', context)
 
 # API views pour les données
 @method_decorator(csrf_exempt, name='dispatch')

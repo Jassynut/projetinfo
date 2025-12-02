@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import "../styles/Dashboard.css"
+import "../styles/stats.css"
 
 const HSEDashboard = () => {
   const [selectedDate, setSelectedDate] = useState({
@@ -17,7 +17,7 @@ const HSEDashboard = () => {
 
   return (
     <div className="page-container">
-      <div className="dashboard-controls">
+      <div className="stats-controls">
         <h2>Tableau de bord HSE</h2>
         <div className="date-controls">
           <label>Sélectionner la date :</label>
@@ -28,7 +28,7 @@ const HSEDashboard = () => {
         </div>
       </div>
 
-      <div className="dashboard-charts">
+      <div className="stats-charts">
         <div className="chart-card">
           <h3>Pourcentage de présences</h3>
           <div className="chart-display">

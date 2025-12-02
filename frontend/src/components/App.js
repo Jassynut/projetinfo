@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom"
 import axios from "axios"
 import Login from "./pages/Login"
-import Dashboard from "./pages/Dashboard"
+import stats from "./pages/stats"
 import QuestionnairesList from "./pages/QuestionnairesList"
 import QuestionEditor from "./pages/QuestionEditor"
 import VersionManagement from "./pages/VersionManagement"
@@ -150,7 +150,7 @@ function App() {
 
           {/* Routes protégées */}
           <Route path="/" element={
-            isAuthenticated ? <Dashboard user={userData} /> : <Navigate to="/" />
+            isAuthenticated ? <stats user={userData} /> : <Navigate to="/" />
           } />
           
           <Route path="/gestion-questionnaires" element={

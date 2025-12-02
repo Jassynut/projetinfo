@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom"
-import "../styles/Dashboard.css"
+import "../styles/stats.css"
 
-const Dashboard = () => {
+const stats = () => {
   const features = [
     {
       title: "Base de données",
@@ -36,15 +36,15 @@ const Dashboard = () => {
   ]
 
   return (
-    <div className="dashboard-container">
-      <div className="dashboard-intro">
+    <div className="stats-container">
+      <div className="stats-intro">
         <p>
           Ce portail vous permet de gérer les <strong>formations HSE</strong>, les <strong>tests</strong>, et les{" "}
           <strong>certificats</strong> de vos collaborateurs en toute simplicité.
         </p>
       </div>
 
-      <div className="dashboard-grid">
+      <div className="stats-grid">
         {features.map((feature, index) => (
           <Link key={index} to={feature.link} className="feature-card">
             <div className="feature-icon">{feature.icon}</div>
@@ -57,4 +57,4 @@ const Dashboard = () => {
   )
 }
 
-export default Dashboard
+export default stats

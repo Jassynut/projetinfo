@@ -44,7 +44,7 @@ INSTALLED_APPS = [
     'corsheaders',  # pour le frontend React
     'hse_app',
     'certificats',
-    'dashboard',
+    'stats',
     'tests',
     'authentication',
 ]
@@ -156,5 +156,5 @@ REST_FRAMEWORK = {
 }
 # URLs de login/logout
 LOGIN_URL = '/login/'
-LOGIN_REDIRECT_URL = '/dashboard/'
+LOGIN_REDIRECT_URL = '/stats/'
 LOGOUT_REDIRECT_URL = '/'
