@@ -41,7 +41,7 @@ INSTALLED_APPS = [
     'certificats',
     'dashboard',
     'tests',
-    'authentication'
+    'authentication',
 ]
 
 MIDDLEWARE = [
