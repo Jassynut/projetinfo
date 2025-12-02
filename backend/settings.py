@@ -113,10 +113,11 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 AUTHENTICATION_BACKENDS = [
-    'authentication.backend.HSEUserBackend',
-    'authentication.backend.HSEManagerBackend',
+    'authentication.backend.AdminBackend',       # Pour /admin
+    'authentication.backend.HSEUserBackend',     # HSE Users (CIN seul)
+    'authentication.backend.HSEManagerBackend',  # Managers (full_name + CIN)
 ]
-# Modèle utilisateur personnalisé
+
 AUTH_USER_MODEL = 'authentication.TestUser'
 
 # Internationalization
