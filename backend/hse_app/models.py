@@ -61,7 +61,7 @@ class HSEUser(models.Model):
         reussis = attempts.filter(passed=True).count()
         return round((reussis / attempts.count()) * 100, 1)
 
-class HSEmanager(models.Model):
+class HSEManager(models.Model):
     """Manager pour les opérations HSE spécifiques"""
     name = models.CharField(max_length=100, verbose_name="Nom du manager")
     cin=models.CharField(max_length=50, unique=True, verbose_name="cin")    
@@ -72,4 +72,3 @@ class HSEmanager(models.Model):
     
     def __str__(self):
         return f"{self.name} ({self.cin})"
- 

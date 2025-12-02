@@ -7,7 +7,7 @@ from django.core.paginator import Paginator
 import json
 from datetime import datetime, timedelta
 from tests.models import Test, Question, TestAttempt
-from hse_app.models import HSEmanager, HSEUser
+from hse_app.models import HSEManager, HSEUser
 from authentication.models import TestUser
 
 
@@ -733,7 +733,7 @@ def list_hse_managers(request):
             'error': 'Accès non autorisé'
         }, status=403)
     
-    managers = HSEmanager.objects.all().order_by('name')
+    managers = HSEManager.objects.all().order_by('name')
     
     managers_data = []
     for manager in managers:
@@ -767,7 +767,7 @@ def create_hse_manager(request):
         try:
             data = json.loads(request.body)
             
-            manager = HSEmanager.objects.create(
+            manager = HSEManager.objects.create(
                 name=data['name'],
                 cin=data.get('cin', '')
             )
