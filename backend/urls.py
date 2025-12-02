@@ -1,27 +1,34 @@
-"""
-URL configuration for projetinfo project.
-
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/5.2/topics/http/urls/
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
-"""
+# backend/urls.py
 from django.contrib import admin
 from django.urls import path, include
+from django.conf import settings
+from django.conf.urls.static import static
 
 urlpatterns = [
+    # Interface d'administration Django
     path('admin/', admin.site.urls),
-    path('hse/', include('backend.hse_app.urls')),
-    path('certificats/', include('backend.certificats.urls')),
-    path('dashboard/', include('backend.dashboard.urls')),
-    path('tests/', include('backend.tests.urls')),
-    path('users/', include('backend.users.urls')),
+    
+    # API Authentication (TestUsers et QR codes)
+    path('api/auth/', include('authentication.urls')),     # ← SI ton app s'appelle authentication
+    
+    # API HSE (Tests, questions, résultats)
+    path('api/hse/', include('hse_app.urls')),    
+    # API Tests (si tu as une app séparée pour les tests généraux)
+    path('api/tests/', include('tests.urls')),
+    
+    # API Dashboard (statistiques)
+    path('api/dashboard/', include('dashboard.urls')),
+    
+    # API certificats (si séparé)
+    path('api/certificats/', include('certificats.urls')),
+
 ]
+
+# Pour servir les fichiers média en développement
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+
+# Pour les pages d'erreur personnalisées
+handler404 = 'backend.views.handler404'
+handler500 = 'backend.views.handler500'

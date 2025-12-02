@@ -37,12 +37,11 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'corsheaders',  # pour le frontend React
-    'backend.hse_app',
-    'backend.certificats',
-    'backend.dashboard',
-    'backend.tests',
-    'backend.users',
-    'backend.authentication'
+    'hse_app',
+    'certificats',
+    'dashboard',
+    'tests',
+    'authentication'
 ]
 
 MIDDLEWARE = [

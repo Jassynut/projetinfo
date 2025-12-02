@@ -2,17 +2,12 @@
 from django.urls import path
 from . import views
 
+app_name = 'auth'
+
 urlpatterns = [
-    # Authentification de base
-    path('login/', views.login_view, name='login'),
-    path('logout/', views.logout_view, name='logout'),
-    path('current-user/', views.current_user, name='current_user'),
-    
-    # Gestion du profil
-    path('change-access-code/', views.change_access_code, name='change_access_code'),
-    path('login-history/', views.login_history, name='login_history'),
-    
-    # Administration (staff seulement)
-    path('admin/users/', views.admin_users_list, name='admin_users_list'),
-    path('admin/create-user/', views.admin_create_user, name='admin_create_user'),
+    path('test/<int:test_id>/auth/', views.authenticate_and_start_test, name='auth_start_test'),
+    path('manager/generate-qr/<int:test_id>/', views.manager_generate_test_qr, name='manager_generate_qr'),
+    path('decode-qr/', views.decode_qr_and_prepare_test, name='decode_qr'),
+    path('current-user/', views.get_current_user, name='current_user'),
+    path('logout/', views.logout_user, name='logout'),
 ]

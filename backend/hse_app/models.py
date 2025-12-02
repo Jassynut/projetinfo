@@ -274,8 +274,6 @@ class HSEQuestion(models.Model):
         verbose_name_plural = "Questions HSE"
         ordering = ['question_code']
         indexes = [
-            models.Index(fields=['categorie']),
-            models.Index(fields=['niveau_difficulte']),
             models.Index(fields=['is_active']),
             models.Index(fields=['is_mandatory']),
             models.Index(fields=['reponse_correcte']),
@@ -297,23 +295,31 @@ class HSEQuestion(models.Model):
         """Vérifie si la réponse de l'utilisateur est correcte"""
         if user_answer is None:
             return False
-            
-        # Convertir la réponse de l'utilisateur en booléen
+        
+        # user_answer sera maintenant un booléen direct (True/False)
+        # provenant des boutons cliqués
+        
+        # Si c'est déjà un booléen, utiliser directement
+        if isinstance(user_answer, bool):
+            return user_answer == self.reponse_correcte
+        
+        # Si c'est une chaîne "true"/"false" (venant du frontend)
         if isinstance(user_answer, str):
             user_answer = user_answer.lower().strip()
-            if user_answer in ['vrai', 'true', 'verdadero', '1', 'yes', 'oui', 'v', 't']:
+            if user_answer in ['true', 'vrai', '1', 'yes', 'oui', 't']:
                 user_bool = True
-            elif user_answer in ['faux', 'false', 'falso', '0', 'no', 'non', 'f']:
+            elif user_answer in ['false', 'faux', '0', 'no', 'non', 'f']:
                 user_bool = False
             else:
                 return False
-        elif isinstance(user_answer, int):
-            user_bool = bool(user_answer)
-        else:
-            user_bool = bool(user_answer)
+            return user_bool == self.reponse_correcte
         
-        return user_bool == self.reponse_correcte
-    
+        # Si c'est un entier (0/1)
+        if isinstance(user_answer, int):
+            user_bool = bool(user_answer)
+            return user_bool == self.reponse_correcte
+        
+        return False
     @property
     def reponse_correcte_display(self):
         """Retourne la réponse correcte sous forme de texte"""
