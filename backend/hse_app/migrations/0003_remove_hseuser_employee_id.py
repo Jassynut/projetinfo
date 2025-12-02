@@ -12,6 +12,6 @@ class Migration(migrations.Migration):
     operations = [
         migrations.RemoveField(
             model_name='hseuser',
-            name='employee_id',
+            name='HSEmanager_id',
         ),
     ]

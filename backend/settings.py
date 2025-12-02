@@ -42,7 +42,7 @@ INSTALLED_APPS = [
     'backend.dashboard',
     'backend.tests',
     'backend.users',
-    'backend.authentication',
+    'backend.authentication'
 ]
 
 MIDDLEWARE = [
@@ -109,7 +109,9 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-AUTH_USER_MODEL = 'authentication.TestUserManager'
+# Modèle utilisateur personnalisé
+AUTH_USER_MODEL = 'authentication.TestUser'
+
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 
@@ -148,3 +150,7 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ]
 }
+# URLs de login/logout
+LOGIN_URL = '/login/'
+LOGIN_REDIRECT_URL = '/dashboard/'
+LOGOUT_REDIRECT_URL = '/'

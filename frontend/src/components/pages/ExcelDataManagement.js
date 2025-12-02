@@ -47,7 +47,7 @@ const ExcelDataManagement = () => {
             <th>Chef de Projet OCP</th>
             <th>Nom</th>
             <th>Prénom</th>
-            <th>CIN N°</th>
+            <th>cin N°</th>
             <th>Adresse E-mail du Coordinateur</th>
             <th>Fonction de l'Agent</th>
             <th>Présence</th>

@@ -9,7 +9,7 @@ class TestUserManager(BaseUserManager):
 
     def create_user(self, cin, username=None, full_name=None):
         if not cin:
-            raise ValueError("Le CIN est requis")
+            raise ValueError("Le cin est requis")
         
         # Générer le username si non fourni
         if not username:
@@ -24,7 +24,7 @@ class TestUserManager(BaseUserManager):
             full_name=full_name or username
         )
         
-        # Utiliser le CIN comme mot de passe
+        # Utiliser le cin comme mot de passe
         user.set_password(cin)
         user.save(using=self._db)
         return user
@@ -75,7 +75,7 @@ class TestUserManager(BaseUserManager):
     
     def get_or_create_by_cin(self, cin):
         """
-        Récupérer ou créer un utilisateur par CIN.
+        Récupérer ou créer un utilisateur par cin.
         Utilisé pour l'authentification QR.
         """
         try:
@@ -84,10 +84,10 @@ class TestUserManager(BaseUserManager):
             # Essayer de récupérer les infos depuis hse_app si disponible
             full_name = None
             try:
-                from hse_app.models import Employee
-                employee = Employee.objects.get(cin=cin)
-                full_name = employee.full_name
-            except (ImportError, Employee.DoesNotExist):
+                from hse_app.models import HSEmanager
+                HSEmanager = HSEmanager.objects.get(cin=cin)
+                full_name = HSEmanager.full_name
+            except (ImportError, HSEmanager.DoesNotExist):
                 pass
             
             user = self.create_user(cin=cin, full_name=full_name)
@@ -97,15 +97,15 @@ class TestUserManager(BaseUserManager):
 class TestUser(AbstractBaseUser, PermissionsMixin):
     """
     Modèle utilisateur pour les tests.
-    Authentication normale: username/mot de passe (CIN)
-    Authentication QR: CIN seulement
+    Authentication normale: username/mot de passe (cin)
+    Authentication QR: cin seulement
     """
     
     # Champs principaux
     cin = models.CharField(
         max_length=20,
         unique=True,
-        verbose_name="CIN",
+        verbose_name="cin",
         help_text="Numéro de carte d'identité nationale"
     )
     

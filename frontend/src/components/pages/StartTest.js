@@ -5,7 +5,7 @@ import { useNavigate } from "react-router-dom"
 import "../styles/Pages.css"
 
 function StartTest() {
-  const [cin, setCin] = useState("")
+  const [cin, setcin] = useState("")
   const navigate = useNavigate()
 
   const handleStartTest = () => {
@@ -18,15 +18,15 @@ function StartTest() {
     <div className="page-container">
       <div className="card-centered">
         <div className="card-title-large">Démarrer le Test</div>
-        <p className="card-subtitle">Veuillez saisir votre numéro de CIN pour commencer.</p>
+        <p className="card-subtitle">Veuillez saisir votre numéro de cin pour commencer.</p>
 
         <div className="form-group">
-          <label>Numéro de CIN :</label>
+          <label>Numéro de cin :</label>
           <input
             type="text"
             placeholder="Ex : AB123456"
             value={cin}
-            onChange={(e) => setCin(e.target.value)}
+            onChange={(e) => setcin(e.target.value)}
             className="input-field"
           />
         </div>

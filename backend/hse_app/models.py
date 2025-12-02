@@ -19,7 +19,7 @@ class HSEUser(models.Model):
     nom = models.CharField(max_length=100, verbose_name="Nom")
     prénom = models.CharField(max_length=100, verbose_name="Prénom")
     email = models.EmailField(verbose_name="Adresse email")
-    CIN = models.CharField(max_length=20, unique=True, verbose_name="CIN")    
+    cin = models.CharField(max_length=20, unique=True, verbose_name="cin")    
     # Informations professionnelles
     entite = models.CharField(max_length=100, verbose_name="Entité")
     entreprise = models.CharField(max_length=100, verbose_name="Entreprise")
@@ -64,7 +64,7 @@ class HSEUser(models.Model):
 class HSEmanager(models.Model):
     """Manager pour les opérations HSE spécifiques"""
     name = models.CharField(max_length=100, verbose_name="Nom du manager")
-    CIN=models.CharField(max_length=50, unique=True, verbose_name="CIN")    
+    cin=models.CharField(max_length=50, unique=True, verbose_name="cin")    
     class Meta:
         verbose_name = "Manager HSE"
         verbose_name_plural = "Managers HSE"

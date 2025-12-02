@@ -82,10 +82,10 @@ class TestUserProfileSerializer(serializers.ModelSerializer):
         model = UserProfile
         fields = [
             'entite', 'entreprise', 'chef_projet_ocp', 'nom', 'prenom',
-            'CIN', 'email', 'poste'
+            'cin', 'email', 'poste'
         ]
         extra_kwargs = {
-            'CIN': {'write_only': True}
+            'cin': {'write_only': True}
         }
 
 
