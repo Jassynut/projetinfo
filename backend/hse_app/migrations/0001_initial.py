@@ -13,7 +13,7 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.CreateModel(
-            name='HSETest',
+            name='Test',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('title', models.CharField(max_length=200)),
@@ -60,7 +60,7 @@ class Migration(migrations.Migration):
                 ('question_text', models.TextField()),
                 ('question_type', models.CharField(choices=[('multiple_choice', 'Multiple Choice'), ('true_false', 'True/False'), ('short_answer', 'Short Answer')], default='multiple_choice', max_length=20)),
                 ('points', models.IntegerField(default=1)),
-                ('test', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='questions', to='hse_app.hsetest')),
+                ('test', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='questions', to='hse_app.Test')),
             ],
         ),
         migrations.CreateModel(
@@ -92,7 +92,7 @@ class Migration(migrations.Migration):
                 ('qr_code_data', models.CharField(blank=True, max_length=255)),
                 ('start_time', models.DateTimeField(auto_now_add=True)),
                 ('end_time', models.DateTimeField(blank=True, null=True)),
-                ('test', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='hse_app.hsetest')),
+                ('test', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='hse_app.Test')),
             ],
         ),
         migrations.AddField(

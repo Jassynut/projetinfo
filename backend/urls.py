@@ -12,7 +12,7 @@ urlpatterns = [
     path('api/auth/', include('authentication.urls')),     # ← SI ton app s'appelle authentication
     
     # API HSE (Tests, questions, résultats)
-    path('api/hse/', include('hse_app.urls')),    
+    path('api/hse_app/', include('hse_app.urls')),    
     # API Tests (si tu as une app séparée pour les tests généraux)
     path('api/tests/', include('tests.urls')),
     

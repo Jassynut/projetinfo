@@ -4,7 +4,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 import json
-from .models import Test, TestSession, Question, Category
+from .models import Test, TestSession, Question
 from datetime import timedelta
 
 # ==================== API PUBLIC (tests disponibles) ====================
@@ -94,22 +94,12 @@ def manager_create_test(request):
             test = Test.objects.create(
                 title=data['title'],
                 description=data.get('description', ''),
-                instructions=data.get('instructions', ''),
                 duration_minutes=data.get('duration_minutes', 30),
                 passing_score=data.get('passing_score', 70),
-                difficulty=data.get('difficulty', 'medium'),
                 is_active=data.get('is_active', True),
                 created_by=request.user
             )
             
-            # Assigner une catégorie si fournie
-            if data.get('category_id'):
-                try:
-                    category = Category.objects.get(id=data['category_id'])
-                    test.category = category
-                    test.save()
-                except Category.DoesNotExist:
-                    pass
             
             return JsonResponse({
                 'success': True,
@@ -159,7 +149,6 @@ def manager_add_question(request, test_id):
             # Créer la question
             question = Question.objects.create(
                 text=data['text'],
-                question_type=data.get('question_type', 'multiple_choice'),
                 points=data.get('points', 1),
                 order=data.get('order', 0),
                 test=test

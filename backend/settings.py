@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 import os
+import sys
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -26,6 +27,10 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-w2(c2(oo-ad&=878nqa2)5f884
 DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
 ALLOWED_HOSTS = ['localhost', '127.0.0.1', '*']
+
+# Add both possible paths
+sys.path.insert(0, os.path.join(BASE_DIR))  # projetinfo/
+sys.path.insert(0, os.path.join(BASE_DIR, 'backend'))  # projetinfo/backend/
 
 
 INSTALLED_APPS = [

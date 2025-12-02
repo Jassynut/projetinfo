@@ -6,7 +6,7 @@ from django.db.models import Q, Count, Avg, F
 from django.core.paginator import Paginator
 import json
 from datetime import datetime, timedelta
-from .models import HSEUser, HSETest, HSEQuestion, TestAttempt, HSEmanager
+from .models import HSEUser, Test, Question, TestAttempt, HSEmanager
 from authentication.models import TestUser
 
 
@@ -230,7 +230,7 @@ def list_hse_tests(request):
     Lister tous les tests HSE disponibles
     GET: /api/hse/tests/
     """
-    tests = HSETest.objects.filter(is_active=True).order_by('version')
+    tests = Test.objects.filter(is_active=True).order_by('version')
     
     tests_data = []
     for test in tests:
@@ -298,7 +298,7 @@ def submit_hse_test_answers(request, attempt_id):
         
         for question_id_str, user_answer in user_answers.items():
             question_id = int(question_id_str)
-            question = HSEQuestion.objects.get(id=question_id)
+            question = Question.objects.get(id=question_id)
                 
                 # Vérifier la réponse (user_answer est déjà True/False)
             is_correct = question.check_answer(user_answer)
@@ -334,8 +334,8 @@ def start_hse_test_attempt(request):
             
             # Récupérer le test
             try:
-                test = HSETest.objects.get(version=test_version, is_active=True)
-            except HSETest.DoesNotExist:
+                test = Test.objects.get(version=test_version, is_active=True)
+            except Test.DoesNotExist:
                 return JsonResponse({
                     'success': False,
                     'error': f'Test version {test_version} non trouvé'
@@ -463,7 +463,7 @@ def submit_hse_test_answers(request, attempt_id):
             for question_id_str, answer_data in user_answers.items():
                 try:
                     question_id = int(question_id_str)
-                    question = HSEQuestion.objects.get(id=question_id)
+                    question = Question.objects.get(id=question_id)
                     
                     user_answer = answer_data.get('answer')
                     if user_answer is None:
@@ -479,7 +479,7 @@ def submit_hse_test_answers(request, attempt_id):
                         if is_correct:
                             optional_correct += 1
                             
-                except (HSEQuestion.DoesNotExist, ValueError):
+                except (Question.DoesNotExist, ValueError):
                     continue
             
             # Calculer les pourcentages

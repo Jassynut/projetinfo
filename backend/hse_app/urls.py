@@ -10,7 +10,7 @@ urlpatterns = [
     
     # Tests HSE
     path('tests/', views.list_hse_tests, name='list_hse_tests'),
-    path('tests/version/<int:version>/', views.get_hse_test_details, name='test_details'),
+    path('tests/version/<int:version>/', views.submit_hse_test_answers, name='test_details'),
     
     # Test Attempts
     path('test-attempts/start/', views.start_hse_test_attempt, name='start_test_attempt'),
