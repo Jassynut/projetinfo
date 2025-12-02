@@ -6,7 +6,8 @@ from django.db.models import Q, Count, Avg, F
 from django.core.paginator import Paginator
 import json
 from datetime import datetime, timedelta
-from .models import HSEUser, Test, Question, TestAttempt, HSEmanager
+from tests.models import Test, Question, TestAttempt
+from hse_app.models import HSEmanager, HSEUser
 from authentication.models import TestUser
 
 
@@ -253,7 +254,14 @@ def list_hse_tests(request):
         'tests': tests_data,
         'count': len(tests_data)
     })
-
+# hse_app/views.py - AJOUTE CETTE FONCTION SI ELLE N'EXISTE PAS
+def get_hse_test_details(request, version):
+    """Détails d'un test HSE spécifique"""
+    try:
+        test = Test.objects.get(version=version, is_active=True)
+        # ... ta logique pour retourner les détails du test
+    except Test.DoesNotExist:
+        return JsonResponse({'success': False, 'error': f'Test version {version} non trouvé'})
 @csrf_exempt
 @login_required
 def submit_hse_test_answers(request, attempt_id):

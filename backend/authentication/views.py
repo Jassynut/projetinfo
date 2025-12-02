@@ -8,7 +8,7 @@ import qrcode
 import io
 import base64
 from datetime import datetime
-from .models import TestUser
+from authentication.models import TestUser
 
 
 # ==================== API POUR MANAGER (PC) ====================
@@ -233,8 +233,8 @@ def authenticate_and_start_test(request, test_id):
                 # (Ajouter ici tes règles métier)
                 
                 # 5. Créer une session de test
-                from tests.models import TestSession
-                test_session = TestSession.objects.create(
+                from tests.models import TestAttempt
+                test_session = TestAttempt.objects.create(
                     test=test,
                     user=user,
                     started_at=datetime.now(),
@@ -310,8 +310,8 @@ def submit_test_answers(request, test_session_id):
             answers = data.get('answers', [])
             
             # Récupérer la session
-            from tests.models import TestSession, TestAnswer
-            test_session = TestSession.objects.get(
+            from tests.models import TestAttempt, TestAnswer
+            test_session = TestAttempt.objects.get(
                 id=test_session_id,
                 user=request.user
             )

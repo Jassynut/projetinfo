@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model, authenticate
-from .models import UserProfile, TestVersion, Question, AnswerOption, TestSession, UserAnswer
+from .models import UserProfile, TestVersion, Question, AnswerOption, TestAttempt, UserAnswer
 
 User = get_user_model()
 
@@ -174,7 +174,7 @@ class TestSessionListSerializer(serializers.ModelSerializer):
     user_name = serializers.CharField(source='user.get_full_name', read_only=True)
 
     class Meta:
-        model = TestSession
+        model = TestAttempt
         fields = ['id', 'test_version_name', 'user_name', 'start_time', 'end_time', 'status', 'score', 'time_spent']
 
 

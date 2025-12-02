@@ -1,4 +1,4 @@
-# hse_app/urls.py
+# hse_app/urls.py - CORRIGÉ
 from django.urls import path
 from . import views
 
@@ -10,7 +10,7 @@ urlpatterns = [
     
     # Tests HSE
     path('tests/', views.list_hse_tests, name='list_hse_tests'),
-    path('tests/version/<int:version>/', views.submit_hse_test_answers, name='test_details'),
+    path('tests/version/<int:version>/', views.get_hse_test_details, name='test_details'),  # ← CHANGÉ ICI
     
     # Test Attempts
     path('test-attempts/start/', views.start_hse_test_attempt, name='start_test_attempt'),

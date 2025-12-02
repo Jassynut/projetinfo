@@ -4,7 +4,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 import json
-from .models import Test, TestSession, Question
+from .models import Test, TestAttempt, Question
 from datetime import timedelta
 
 # ==================== API PUBLIC (tests disponibles) ====================
@@ -204,7 +204,7 @@ def manager_get_test_results(request, test_id):
     
     try:
         test = Test.objects.get(id=test_id)
-        sessions = TestSession.objects.filter(test=test, status='completed')
+        sessions = TestAttempt.objects.filter(test=test, status='completed')
         
         results = []
         for session in sessions:
@@ -245,7 +245,7 @@ def manager_get_test_results(request, test_id):
 def user_test_history(request):
     """Historique des tests passés par l'utilisateur"""
     user = request.user
-    sessions = TestSession.objects.filter(user=user).order_by('-started_at')
+    sessions = TestAttempt.objects.filter(user=user).order_by('-started_at')
     
     history = []
     for session in sessions:
@@ -272,7 +272,7 @@ def user_test_history(request):
 def user_get_certificate(request, session_id):
     """Générer un certificat pour un test réussi"""
     try:
-        session = TestSession.objects.get(id=session_id, user=request.user)
+        session = TestAttempt.objects.get(id=session_id, user=request.user)
         
         if session.status != 'completed' or session.score < session.test.passing_score:
             return JsonResponse({
@@ -299,7 +299,7 @@ def user_get_certificate(request, session_id):
             'download_url': f"/api/certificates/{session.id}/download/"
         })
         
-    except TestSession.DoesNotExist:
+    except TestAttempt.DoesNotExist:
         return JsonResponse({
             'success': False,
             'error': 'Session non trouvée'
