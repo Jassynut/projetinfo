@@ -86,11 +86,11 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': os.getenv('DB_NAME', 'HSE_database'),
-        'USER': os.getenv('DB_USER', 'root'),
-        'PASSWORD': os.getenv('DB_PASSWORD', 'root'),
-        'HOST': os.getenv('DB_HOST', 'localhost'),
-        'PORT': os.getenv('DB_PORT', '3306'),
+        'NAME': 'hse_database',
+        'USER': 'root',
+        'PASSWORD': 'root',
+        'HOST': 'localhost',
+        'PORT': '3306',
     }
 }
 
@@ -113,9 +113,8 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 AUTHENTICATION_BACKENDS = [
-    'test_app.backends.HSEUserBackend',      # Auth HSE User (CIN seul)
-    'test_app.backends.HSEManagerBackend',   # Auth Manager (full_name + CIN)
-    'django.contrib.auth.backends.ModelBackend',  # Admin Django
+    'authentication.backend.HSEUserBackend',
+    'authentication.backend.HSEManagerBackend',
 ]
 # Modèle utilisateur personnalisé
 AUTH_USER_MODEL = 'authentication.TestUser'

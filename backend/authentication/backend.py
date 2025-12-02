@@ -1,25 +1,23 @@
 from django.contrib.auth.backends import BaseBackend
-from .models import TestUser
+from authentication.models import TestUser
 
 
 class HSEUserBackend(BaseBackend):
-    """
-    Authentification pour les utilisateurs HSE.
-    UN SEUL CHAMP: CIN (après scan QR).
-    """
+    """Auth HSE User: CIN uniquement"""
 
     def authenticate(self, request, cin=None, **kwargs):
         if cin is None:
             return None
 
         try:
+            # Chercher un user existant
             user = TestUser.objects.get(cin=cin, user_type='user')
             return user
         except TestUser.DoesNotExist:
-            # Auto-créer depuis HSEUser si existe
+            # Auto-créer depuis HSEUser
             try:
-                from hse_app.models import HSEUser as HSEUserModel
-                hse_user = HSEUserModel.objects.get(cin=cin)
+                from hse_app.models import HSEUser
+                hse_user = HSEUser.objects.get(cin=cin)
                 return TestUser.objects.create_hse_user(
                     cin=cin,
                     full_name=hse_user.full_name
@@ -35,17 +33,14 @@ class HSEUserBackend(BaseBackend):
 
 
 class HSEManagerBackend(BaseBackend):
-    """
-    Authentification pour les managers HSE.
-    - Username: full_name
-    - Mot de passe: CIN
-    """
+    """Auth Manager: full_name + CIN comme mot de passe"""
 
     def authenticate(self, request, full_name=None, cin=None, **kwargs):
         if full_name is None or cin is None:
             return None
 
         try:
+            # Chercher manager existant dans TestUser
             user = TestUser.objects.get(
                 full_name__iexact=full_name.strip(),
                 user_type='manager'
@@ -54,18 +49,20 @@ class HSEManagerBackend(BaseBackend):
                 return user
             return None
         except TestUser.DoesNotExist:
-            # Auto-créer depuis HSEManager si existe
+            # Auto-créer depuis HSEmanager
             try:
-                from hse_app.models import HSEManager as HSEManagerModel
-                manager = HSEManagerModel.objects.get(
+                from hse_app.models import HSEmanager
+                manager = HSEmanager.objects.get(
                     full_name__iexact=full_name.strip(),
                     cin=cin
                 )
+                # Créer dans TestUser avec CIN comme mot de passe
                 return TestUser.objects.create_manager(
-                    cin=cin,
+                    cin=manager.cin,
                     full_name=manager.full_name
                 )
-            except Exception:
+            except Exception as e:
+                print(f"[DEBUG] Erreur création manager: {e}")
                 return None
 
     def get_user(self, user_id):
