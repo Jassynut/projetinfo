@@ -5,6 +5,9 @@ import uuid
 from backend.authentication.models import TestUserManager
 from django.core.files import File
 from io import BytesIO
+from django.conf import settings
+from django.utils.translation import gettext_lazy as _
+
 # =============================================================================
 # MODÈLES PRINCIPAUX HSE
 # =============================================================================
@@ -58,11 +61,18 @@ class HSEUser(models.Model):
         reussis = attempts.filter(passed=True).count()
         return round((reussis / attempts.count()) * 100, 1)
 
-from django.db import models
-from django.core.validators import MinValueValidator, MaxValueValidator
-from django.conf import settings
-from django.utils.translation import gettext_lazy as _
-
+class HSEmanager(models.Model):
+    """Manager pour les opérations HSE spécifiques"""
+    name = models.CharField(max_length=100, verbose_name="Nom du manager")
+    CIN=models.CharField(max_length=50, unique=True, verbose_name="CIN")    
+    class Meta:
+        verbose_name = "Manager HSE"
+        verbose_name_plural = "Managers HSE"
+        ordering = ['name']
+    
+    def __str__(self):
+        return f"{self.name} ({self.code_access})"
+    
 class HSETest(models.Model):
     """Test HSE avec questions et paramètres"""
     
