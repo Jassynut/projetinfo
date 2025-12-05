@@ -100,8 +100,8 @@ def manager_generate_test_qr(request, test_id):
                 'action': 'access_test',
                 'generated_at': datetime.now().isoformat(),
                 'generated_by': request.user.full_name,
-                'url': f"/test/{test_id}/enter-cin"
-            }
+                'url': f"http://10.26.31.10:5173/qr-login/{test_id}"
+} 
 
             # Convertir en JSON
             qr_string = json.dumps(qr_payload)
