@@ -2,5 +2,7 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
-    path('', views.home, name='certificats_home'),
+    path('download-certificate/<int:user_id>/<int:test_id>/', 
+     views.download_certificate, name='download_certificate'),
+
 ]

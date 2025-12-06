@@ -25,10 +25,37 @@ class AdminBackend(BaseBackend):
 
 
 class HSEUserBackend(BaseBackend):
-    """Auth HSE User: CIN uniquement"""
-    # ... ton code existant ...
+    """Authentification des utilisateurs HSE via CIN uniquement."""
+
+    def authenticate(self, request, cin=None, **kwargs):
+        if cin is None:
+            return None
+        try:
+            user, _created = TestUser.objects.authenticate_hse_user(cin)
+            return user
+        except Exception:
+            return None
+
+    def get_user(self, user_id):
+        try:
+            return TestUser.objects.get(pk=user_id)
+        except TestUser.DoesNotExist:
+            return None
 
 
 class HSEManagerBackend(BaseBackend):
-    """Auth Manager: full_name + cin"""
-    # ... ton code existant ...
+    """Authentification des managers HSE via nom complet + CIN."""
+
+    def authenticate(self, request, full_name=None, cin=None, **kwargs):
+        if not full_name or not cin:
+            return None
+        try:
+            return TestUser.objects.authenticate_manager(full_name, cin)
+        except Exception:
+            return None
+
+    def get_user(self, user_id):
+        try:
+            return TestUser.objects.get(pk=user_id)
+        except TestUser.DoesNotExist:
+            return None
