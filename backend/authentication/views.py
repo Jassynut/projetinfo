@@ -9,6 +9,10 @@ import base64
 from datetime import datetime
 from authentication.models import TestUser
 
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from authentication.importExcel import import_apprenants_from_excel
 
 # ==================== API POUR MANAGER (PC) ====================
 # Authentification: full_name (username) + CIN (mot de passe)
@@ -436,3 +440,14 @@ def calculate_score(test_session):
     correct_count = sum(1 for a in answers if a.is_correct)
     total = answers.count()
     return (correct_count / total * 100) if total > 0 else 0
+
+#==================== API POUR IMPORTER APPRENANTS ====================
+
+class ImportApprenantsView(APIView):
+    def post(self, request):
+        file = request.FILES.get("file")
+        if not file:
+            return Response({"error": "Fichier manquant"}, status=400)
+
+        total = importExcel.import_apprenants_from_excel(file)
+        return Response({"imported": total})
