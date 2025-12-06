@@ -12,7 +12,7 @@ from authentication.models import TestUser
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from authentication.importExcel import import_apprenants_from_excel
+from authentication.importExcel import importexcel
 
 # ==================== API POUR MANAGER (PC) ====================
 # Authentification: full_name (username) + CIN (mot de passe)
@@ -443,11 +443,23 @@ def calculate_score(test_session):
 
 #==================== API POUR IMPORTER APPRENANTS ====================
 
-class ImportApprenantsView(APIView):
+class UploadApprenantsView(APIView):
+    """
+    Upload d'un fichier Excel pour importer des apprenants HSE.
+    """
     def post(self, request):
-        file = request.FILES.get("file")
-        if not file:
-            return Response({"error": "Fichier manquant"}, status=400)
+        excel_file = request.FILES.get("file")
 
-        total = importExcel.import_apprenants_from_excel(file)
-        return Response({"imported": total})
+        if not excel_file:
+            return Response(
+                {"error": "Aucun fichier n'a été envoyé."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Appel du service d'import
+        result = importexcel(excel_file)
+
+        if result.get("status") == "error":
+            return Response(result, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(result, status=status.HTTP_201_CREATED)

@@ -3,7 +3,8 @@ from django.contrib import admin
 from django.urls import path
 from django.http import JsonResponse
 from authentication import views
-
+from authentication.views import UploadApprenantsView
+import include
 
 def test_view(request):
     return JsonResponse({'status': 'ok'})
@@ -68,5 +69,4 @@ urlpatterns = [
         "logout/",
         views.logout_user,
         name="logout_user"
-    ),
-]
+    )]

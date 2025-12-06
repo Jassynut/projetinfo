@@ -2,7 +2,7 @@ import pandas as pd
 from django.db import transaction
 from authentication.models import TestUser  
 
-def importExcel(excel_file):
+def importexcel(excel_file):
     """
     Importer une liste d'apprenants (HSE Users) depuis un fichier Excel.
     Le fichier doit contenir les colonnes : CIN, FULL_NAME
