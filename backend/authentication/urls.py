@@ -1,6 +1,7 @@
 # authentication/urls.py
 from django.urls import path
 from . import views
+from .views import ImportApprenantsView
 
 app_name = 'auth'
 
@@ -10,4 +11,5 @@ urlpatterns = [
     path('decode-qr/', views.decode_qr_and_prepare_test, name='decode_qr'),
     path('current-user/', views.get_current_user, name='current_user'),
     path('logout/', views.logout_user, name='logout'),
+    path("import-apprenants/", ImportApprenantsView.as_view()),
 ]
