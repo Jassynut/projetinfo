@@ -59,3 +59,5 @@ class HSEManagerBackend(BaseBackend):
             return TestUser.objects.get(pk=user_id)
         except TestUser.DoesNotExist:
             return None
+        
+        
