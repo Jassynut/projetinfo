@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Certificat HSE</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Arial', sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+        
+        .certificate-container {
+            width: 100%;
+            max-width: 800px;
+            background: white;
+            border: 3px solid #2c5aa0;
+            border-radius: 10px;
+            padding: 60px 40px;
+            margin: 0 auto;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .certificate-header {
+            margin-bottom: 40px;
+            border-bottom: 2px solid #2c5aa0;
+            padding-bottom: 20px;
+        }
+        
+        .certificate-title {
+            font-size: 42px;
+            font-weight: bold;
+            color: #2c5aa0;
+            margin-bottom: 10px;
+            letter-spacing: 2px;
+        }
+        
+        .certificate-subtitle {
+            font-size: 18px;
+            color: #555;
+            font-style: italic;
+        }
+        
+        .certificate-body {
+            margin: 40px 0;
+        }
+        
+        .label {
+            font-size: 14px;
+            color: #777;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-top: 20px;
+            margin-bottom: 5px;
+        }
+        
+        .value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2c5aa0;
+            margin-bottom: 30px;
+            padding: 10px 0;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .certificate-footer {
+            margin-top: 50px;
+            display: flex;
+            justify-content: space-around;
+            padding-top: 40px;
+            border-top: 2px solid #2c5aa0;
+        }
+        
+        .signature-block {
+            width: 150px;
+        }
+        
+        .signature-line {
+            border-top: 2px solid #333;
+            margin-top: 60px;
+            padding-top: 10px;
+            font-size: 12px;
+        }
+        
+        .info-box {
+            background: #f0f7ff;
+            border-left: 4px solid #2c5aa0;
+            padding: 15px;
+            margin: 30px 0;
+            text-align: left;
+            border-radius: 4px;
+        }
+        
+        .info-box-item {
+            font-size: 13px;
+            margin: 8px 0;
+            color: #333;
+        }
+        
+        .info-box-label {
+            font-weight: bold;
+            display: inline-block;
+            width: 120px;
+            color: #2c5aa0;
+        }
+    </style>
+</head>
+<body>
+    <div class="certificate-container">
+        <!-- En-tête du certificat -->
+        <div class="certificate-header">
+            <div class="certificate-title">CERTIFICAT DE RÉUSSITE</div>
+            <div class="certificate-subtitle">Plateforme de Formation HSE</div>
+        </div>
+        
+        <!-- Corps du certificat -->
+        <div class="certificate-body">
+            <div class="label">Nom du bénéficiaire</div>
+            <div class="value">{{ user_full_name }}</div>
+            
+            <div class="label">Numéro CIN</div>
+            <div class="value">{{ user_cin }}</div>
+            
+            <div class="info-box">
+                <div class="info-box-item">
+                    <span class="info-box-label">Numéro du Certificat:</span>
+                    {{ certificate_number }}
+                </div>
+                <div class="info-box-item">
+                    <span class="info-box-label">Version du Test:</span>
+                    {{ test_version }}
+                </div>
+                <div class="info-box-item">
+                    <span class="info-box-label">Score Obtenu:</span>
+                    {{ score }}/21 ({{ score|floatformat:0 }}%)
+                </div>
+                <div class="info-box-item">
+                    <span class="info-box-label">Date d'émission:</span>
+                    {{ issued_date }}
+                </div>
+                <div class="info-box-item">
+                    <span class="info-box-label">Date d'expiration:</span>
+                    {{ expiry_date }}
+                </div>
+                <div class="info-box-item">
+                    <span class="info-box-label">Validité:</span>
+                    {{ days_until_expiry }} jours restants
+                </div>
+            </div>
+        </div>
+        
+        <!-- Pied de page -->
+        <div class="certificate-footer">
+            <div class="signature-block">
+                <div class="signature-line">Responsable Formation</div>
+            </div>
+            <div class="signature-block">
+                <div class="signature-line">Directeur du Centre</div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

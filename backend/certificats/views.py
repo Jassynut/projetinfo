@@ -2,7 +2,7 @@ from django.http import HttpResponse, JsonResponse
 from django.template.loader import render_to_string
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.decorators import login_required
-from weasyprint import HTML
+from xhtml2pdf import pisa
 from authentication.models import TestUser
 from tests.models import TestAttempt
 from hse_app.models import HSEUser
@@ -10,6 +10,7 @@ from .models import Certificate
 from datetime import datetime, timedelta
 import json
 import uuid
+from io import BytesIO
 
 def download_certificate(request, user_id, test_id):
     """Télécharger un certificat existant (ancien endpoint)"""
@@ -27,7 +28,7 @@ def download_certificate(request, user_id, test_id):
         response = HttpResponse(content_type='application/pdf')
         response['Content-Disposition'] = f'attachment; filename=certificat_{user.username}.pdf'
 
-        HTML(string=html_string).write_pdf(response)
+        pisa.CreatePDF(html_string, response)
         return response
 
     except TestUser.DoesNotExist:
@@ -142,7 +143,7 @@ def download_certificate_by_id(request, certificate_id):
         response = HttpResponse(content_type='application/pdf')
         response['Content-Disposition'] = f'attachment; filename=certificat_{certificate.certificate_number}.pdf'
         
-        HTML(string=html_string).write_pdf(response)
+        pisa.CreatePDF(html_string, response)
         return response
         
     except Certificate.DoesNotExist:
