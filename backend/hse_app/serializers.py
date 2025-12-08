@@ -1,186 +1,314 @@
 from rest_framework import serializers
-from django.contrib.auth import get_user_model, authenticate
-from .models import UserProfile, TestVersion, Question, AnswerOption, TestAttempt, UserAnswer
-
-User = get_user_model()
-
-# =============================================================================
-# SERIALIZERS D'AUTHENTIFICATION
-# =============================================================================
-
-class AdminLoginSerializer(serializers.Serializer):
-    username = serializers.CharField(max_length=50, required=True)
-    code_acces = serializers.CharField(max_length=20, write_only=True, required=True)
-
-    def validate(self, data):
-        username = data.get('username')
-        code_acces = data.get('code_acces')
-
-        if not username or not code_acces:
-            raise serializers.ValidationError("Nom d'utilisateur et code d'accès requis")
-
-        try:
-            user = User.objects.get(username=username, is_active=True)
-
-            # Vérifier le profil admin
-            if not hasattr(user, 'profile') or not user.profile.is_admin:
-                raise serializers.ValidationError("Utilisateur non admin")
-
-            if not user.profile.authenticate(code_acces):
-                raise serializers.ValidationError("Code d'accès incorrect")
-
-            data['user'] = user
-        except User.DoesNotExist:
-            raise serializers.ValidationError("Nom d'utilisateur incorrect ou compte désactivé")
-
-        return data
-
-
-class TestUserLoginSerializer(serializers.Serializer):
-    username = serializers.CharField(max_length=50, required=True)
-    code_acces = serializers.CharField(max_length=20, write_only=True, required=True)
-
-    def validate(self, data):
-        username = data.get('username')
-        code_acces = data.get('code_acces')
-
-        if not username or not code_acces:
-            raise serializers.ValidationError("Nom d'utilisateur et code d'accès requis")
-
-        try:
-            user = User.objects.get(username=username, is_active=True)
-
-            # Vérifier le profil test user
-            if not hasattr(user, 'profile') or user.profile.is_admin:
-                raise serializers.ValidationError("Utilisateur non autorisé à passer le test")
-
-            if not user.profile.authenticate(code_acces):
-                raise serializers.ValidationError("Code d'accès incorrect")
-
-            data['user'] = user
-        except User.DoesNotExist:
-            raise serializers.ValidationError("Nom d'utilisateur incorrect ou compte désactivé")
-
-        return data
-
+from django.contrib.auth import get_user_model
+from .models import HSEUser, HSEManager
+from tests.models import Test, Question, TestAttempt
+from certificats.models import Certificate
+from authentication.models import TestUser
 
 # =============================================================================
-# SERIALIZERS DES UTILISATEURS
+# SERIALIZERS HSE USERS
 # =============================================================================
 
-class AdminUserProfileSerializer(serializers.ModelSerializer):
+class HSEUserListSerializer(serializers.ModelSerializer):
+    """Sérializer simplifié pour lister les utilisateurs HSE"""
+    full_name = serializers.SerializerMethodField()
+    
     class Meta:
-        model = UserProfile
-        fields = ['code_acces', 'poste']  # Seul admin a besoin de ces champs
-        extra_kwargs = {
-            'code_acces': {'write_only': True}
-        }
-
-
-class TestUserProfileSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = UserProfile
+        model = HSEUser
         fields = [
-            'entite', 'entreprise', 'chef_projet_ocp', 'nom', 'prenom',
-            'cin', 'email', 'poste'
+            'id', 'nom', 'prénom', 'full_name', 'cin', 'email', 
+            'entite', 'entreprise', 'presence', 'reussite', 'score', 'taux_reussite'
+        ]
+    
+    def get_full_name(self, obj):
+        return obj.get_full_name()
+
+
+class HSEUserDetailSerializer(serializers.ModelSerializer):
+    """Sérializer complet pour détails utilisateur HSE"""
+    full_name = serializers.SerializerMethodField()
+    test_attempts_count = serializers.SerializerMethodField()
+    recent_attempts = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = HSEUser
+        fields = [
+            'id', 'nom', 'prénom', 'full_name', 'cin', 'email',
+            'entite', 'entreprise', 'chef_projet_ocp',
+            'presence', 'reussite', 'score', 'taux_reussite',
+            'test_attempts_count', 'recent_attempts',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['created_at', 'updated_at', 'taux_reussite']
+    
+    def get_full_name(self, obj):
+        return obj.get_full_name()
+    
+    def get_test_attempts_count(self, obj):
+        if obj.test_user:
+            return obj.test_user.testattempt_set.count()
+        return 0
+    
+    def get_recent_attempts(self, obj):
+        if obj.test_user:
+            attempts = obj.test_user.testattempt_set.order_by('-started_at')[:5]
+            return TestAttemptListSerializer(attempts, many=True).data
+        return []
+
+
+class HSEUserCreateUpdateSerializer(serializers.ModelSerializer):
+    """Sérializer pour création/modification d'utilisateur HSE"""
+    
+    class Meta:
+        model = HSEUser
+        fields = [
+            'nom', 'prénom', 'cin', 'email',
+            'entite', 'entreprise', 'chef_projet_ocp',
+            'presence', 'reussite'
         ]
         extra_kwargs = {
-            'cin': {'write_only': True}
+            'cin': {'validators': []}  # Retirer la validation d'unicité lors de la mise à jour
+        }
+    
+    def validate_cin(self, value):
+        if not value or len(value) < 3:
+            raise serializers.ValidationError("CIN invalide")
+        return value.upper()
+
+
+class HSEUserPresenceSerializer(serializers.Serializer):
+    """Sérializer pour modifier la présence"""
+    presence = serializers.BooleanField()
+
+
+# =============================================================================
+# SERIALIZERS TESTS HSE
+# =============================================================================
+
+class QuestionSimpleSerializer(serializers.ModelSerializer):
+    """Sérializer simplifié pour les questions (sans réponse correcte)"""
+    
+    class Meta:
+        model = Question
+        fields = [
+            'id', 'question_code', 'enonce_fr', 'enonce_en', 'enonce_ar',
+            'is_mandatory', 'points', 'has_image'
+        ]
+
+
+class QuestionDetailSerializer(serializers.ModelSerializer):
+    """Sérializer complet pour les questions"""
+    
+    class Meta:
+        model = Question
+        fields = [
+            'id', 'question_code', 'enonce_fr', 'enonce_en', 'enonce_ar',
+            'reponse_correcte', 'is_mandatory', 'points', 'image', 'has_image',
+            'is_active', 'created_at', 'updated_at'
+        ]
+
+
+class TestListSerializer(serializers.ModelSerializer):
+    """Sérializer simplifié pour lister les tests"""
+    questions_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Test
+        fields = [
+            'id', 'version', 'description', 'duration_minutes',
+            'total_questions', 'mandatory_questions_count', 
+            'passing_score_optional', 'questions_count',
+            'is_active', 'created_at'
+        ]
+    
+    def get_questions_count(self, obj):
+        return obj.questions_count
+
+
+class TestDetailSerializer(serializers.ModelSerializer):
+    """Sérializer complet pour détails du test"""
+    questions = serializers.SerializerMethodField()
+    mandatory_questions_list = serializers.SerializerMethodField()
+    optional_questions_list = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Test
+        fields = [
+            'id', 'version', 'description', 'duration_minutes',
+            'total_questions', 'mandatory_questions_count',
+            'passing_score_optional', 'questions_count',
+            'optional_questions_count', 'is_active',
+            'questions', 'mandatory_questions_list', 'optional_questions_list',
+            'created_at', 'updated_at'
+        ]
+    
+    def get_questions(self, obj):
+        questions = obj.get_questions_in_order()
+        return QuestionSimpleSerializer(questions, many=True).data
+    
+    def get_mandatory_questions_list(self, obj):
+        questions = obj.get_mandatory_questions()
+        return QuestionSimpleSerializer(questions, many=True).data
+    
+    def get_optional_questions_list(self, obj):
+        questions = obj.get_optional_questions()
+        return QuestionSimpleSerializer(questions, many=True).data
+
+
+class TestCreateUpdateSerializer(serializers.ModelSerializer):
+    """Sérializer pour création/modification de test"""
+    
+    class Meta:
+        model = Test
+        fields = [
+            'version', 'description', 'duration_minutes',
+            'total_questions', 'mandatory_questions_count',
+            'passing_score_optional', 'ordre_questions',
+            'mandatory_questions', 'is_active'
+        ]
+    
+    def validate_version(self, value):
+        if value < 1 or value > 6:
+            raise serializers.ValidationError("Version doit être entre 1 et 6")
+        return value
+
+
+# =============================================================================
+# SERIALIZERS TEST ATTEMPTS
+# =============================================================================
+
+class TestAttemptListSerializer(serializers.ModelSerializer):
+    """Sérializer simplifié pour lister les tentatives"""
+    test_version = serializers.IntegerField(source='test.version', read_only=True)
+    user_cin = serializers.CharField(source='user.cin', read_only=True)
+    user_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = TestAttempt
+        fields = [
+            'id', 'test_version', 'user_cin', 'user_name',
+            'langue', 'status', 'mandatory_score_percentage',
+            'optional_score_percentage', 'overall_score_percentage',
+            'passed', 'started_at', 'completed_at', 'time_taken_seconds'
+        ]
+    
+    def get_user_name(self, obj):
+        return obj.user.full_name or obj.user.username
+
+
+class TestAttemptDetailSerializer(serializers.ModelSerializer):
+    """Sérializer complet pour détails de la tentative"""
+    test_version = serializers.IntegerField(source='test.version', read_only=True)
+    user_cin = serializers.CharField(source='user.cin', read_only=True)
+    user_name = serializers.SerializerMethodField()
+    test_details = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = TestAttempt
+        fields = [
+            'id', 'test_version', 'user_cin', 'user_name',
+            'langue', 'status', 'mandatory_correct', 'mandatory_wrong',
+            'mandatory_total', 'optional_correct', 'optional_wrong',
+            'optional_total', 'mandatory_score_percentage',
+            'optional_score_percentage', 'overall_score_percentage',
+            'passed', 'started_at', 'completed_at', 'time_taken_seconds',
+            'user_answers', 'test_details'
+        ]
+        read_only_fields = ['started_at', 'completed_at', 'user_answers']
+    
+    def get_user_name(self, obj):
+        return obj.user.full_name or obj.user.username
+    
+    def get_test_details(self, obj):
+        return {
+            'version': obj.test.version,
+            'total_questions': obj.test.total_questions,
+            'duration_minutes': obj.test.duration_minutes
         }
 
 
-class AdminUserSerializer(serializers.ModelSerializer):
-    profile = AdminUserProfileSerializer()
-    full_name = serializers.SerializerMethodField()
-
-    class Meta:
-        model = User
-        fields = ['id', 'username', 'full_name', 'profile']
-
-    def get_full_name(self, obj):
-        return f"{obj.first_name} {obj.last_name}"
+class TestAttemptStartSerializer(serializers.Serializer):
+    """Sérializer pour démarrer un test"""
+    test_id = serializers.IntegerField()
+    langue = serializers.ChoiceField(choices=[('ar', 'Arabe'), ('fr', 'Français'), ('en', 'Anglais')])
 
 
-class TestUserSerializer(serializers.ModelSerializer):
-    profile = TestUserProfileSerializer()
-    full_name = serializers.SerializerMethodField()
-
-    class Meta:
-        model = User
-        fields = ['id', 'username', 'full_name', 'profile']
-
-    def get_full_name(self, obj):
-        return f"{obj.first_name} {obj.last_name}"
+class TestAttemptSubmitSerializer(serializers.Serializer):
+    """Sérializer pour soumettre les réponses"""
+    user_answers = serializers.JSONField()
+    time_taken_seconds = serializers.IntegerField(required=False, default=0)
 
 
 # =============================================================================
-# SERIALIZERS POUR LES TESTS ET QUESTIONS
+# SERIALIZERS CERTIFICATS
 # =============================================================================
 
-class AnswerOptionSerializer(serializers.ModelSerializer):
+class CertificateListSerializer(serializers.ModelSerializer):
+    """Sérializer simplifié pour lister les certificats"""
+    
     class Meta:
-        model = AnswerOption
-        fields = ['id', 'text', 'order']
+        model = Certificate
+        fields = [
+            'id', 'certificate_number', 'user_full_name', 'user_cin',
+            'test_version', 'score', 'issued_date', 'expiry_date',
+            'is_expired', 'days_until_expiry'
+        ]
 
 
-class QuestionSerializer(serializers.ModelSerializer):
-    options = AnswerOptionSerializer(many=True, read_only=True)
-    has_image = serializers.SerializerMethodField()
-
+class CertificateDetailSerializer(serializers.ModelSerializer):
+    """Sérializer complet pour détails du certificat"""
+    attempt_details = serializers.SerializerMethodField()
+    
     class Meta:
-        model = Question
-        fields = ['id', 'text', 'question_type', 'order', 'points', 'options', 'has_image']
-
-    def get_has_image(self, obj):
-        return bool(obj.image)
-
-
-class TestVersionListSerializer(serializers.ModelSerializer):
-    questions_count = serializers.SerializerMethodField()
-    is_available = serializers.SerializerMethodField()
-
-    class Meta:
-        model = TestVersion
-        fields = ['id', 'name', 'code', 'description', 'is_active', 'passing_score', 'questions_count', 'is_available', 'created_at']
-
-    def get_questions_count(self, obj):
-        return obj.questions.count()
-
-    def get_is_available(self, obj):
-        return obj.is_active
+        model = Certificate
+        fields = [
+            'id', 'certificate_number', 'user_full_name', 'user_cin',
+            'test_version', 'score', 'issued_date', 'expiry_date',
+            'is_expired', 'days_until_expiry', 'pdf_file', 'attempt_details'
+        ]
+        read_only_fields = ['issued_date']
+    
+    def get_attempt_details(self, obj):
+        return {
+            'attempt_id': obj.test_attempt.id,
+            'completed_at': obj.test_attempt.completed_at.isoformat() if obj.test_attempt.completed_at else None,
+            'overall_score': obj.test_attempt.overall_score_percentage
+        }
 
 
-class TestVersionDetailSerializer(TestVersionListSerializer):
-    questions = QuestionSerializer(many=True, read_only=True)
-    class Meta(TestVersionListSerializer.Meta):
-        fields = TestVersionListSerializer.Meta.fields + ['questions']
+class CertificateSearchSerializer(serializers.Serializer):
+    """Sérializer pour rechercher un certificat"""
+    user_name = serializers.CharField(required=False, allow_blank=True)
+    user_cin = serializers.CharField(required=False, allow_blank=True)
 
 
 # =============================================================================
-# SERIALIZERS DE SESSIONS DE TEST
+# SERIALIZERS MANAGERS
 # =============================================================================
 
-class UserAnswerSerializer(serializers.ModelSerializer):
-    question_text = serializers.CharField(source='question.text', read_only=True)
-    question_id = serializers.IntegerField(source='question.id', read_only=True)
-
+class HSEManagerListSerializer(serializers.ModelSerializer):
+    """Sérializer pour lister les managers"""
+    
     class Meta:
-        model = UserAnswer
-        fields = ['id', 'question_id', 'question_text', 'is_correct']
+        model = HSEManager
+        fields = ['id', 'name', 'cin']
 
 
-class TestSessionListSerializer(serializers.ModelSerializer):
-    test_version_name = serializers.CharField(source='test_version.name', read_only=True)
-    user_name = serializers.CharField(source='user.get_full_name', read_only=True)
-
+class HSEManagerDetailSerializer(serializers.ModelSerializer):
+    """Sérializer complet pour manager"""
+    managed_users_count = serializers.SerializerMethodField()
+    
     class Meta:
-        model = TestAttempt
-        fields = ['id', 'test_version_name', 'user_name', 'start_time', 'end_time', 'status', 'score', 'time_spent']
+        model = HSEManager
+        fields = ['id', 'name', 'cin', 'managed_users_count']
+    
+    def get_managed_users_count(self, obj):
+        return HSEUser.objects.count()  # À adapter selon votre logique
 
 
-class TestSessionDetailSerializer(TestSessionListSerializer):
-    user_answers = UserAnswerSerializer(many=True, read_only=True)
-    test_version = TestVersionListSerializer(read_only=True)
-
-    class Meta(TestSessionListSerializer.Meta):
-        fields = TestSessionListSerializer.Meta.fields + ['user_answers', 'test_version']
+class HSEManagerCreateUpdateSerializer(serializers.ModelSerializer):
+    """Sérializer pour créer/modifier un manager"""
+    
+    class Meta:
+        model = HSEManager
+        fields = ['name', 'cin']

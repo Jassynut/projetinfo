@@ -164,7 +164,7 @@ class Question(models.Model):
     # Énoncé de la question en trois langues
     enonce_fr = models.TextField(verbose_name="Énoncé (Français)")
     enonce_en = models.TextField(verbose_name="Énoncé (Anglais)", blank=True)
-    enonce_es = models.TextField(verbose_name="Énoncé (Arabe)", blank=True)
+    enonce_ar = models.TextField(verbose_name="Énoncé (Arabe)", blank=True)
     
     # Réponse correcte (Vrai/Faux)
     reponse_correcte = models.BooleanField(
@@ -252,6 +252,7 @@ class Question(models.Model):
             return user_bool == self.reponse_correcte
         
         return False
+    
     @property
     def reponse_correcte_display(self):
         """Retourne la réponse correcte sous forme de texte"""
@@ -380,47 +381,51 @@ class TestAttempt(models.Model):
     def __str__(self):
         return f"{self.user.username} - V{self.test.version} - {self.get_status_display()}"
     
-def calculate_scores_simple(self):
-    """Version ultra-simple : scores bruts seulement"""
-    mandatory_correct = 0
-    optional_correct = 0
-    
-    mandatory_ids = set(self.test.mandatory_questions)
-    
-    for question_id, user_answer in self.user_answers.items():
-        try:
-            question = Question.objects.get(id=question_id)
-            
-            # Convertir la réponse utilisateur si nécessaire
-            if isinstance(user_answer, dict):
-                user_answer = user_answer.get('answer')
-            
-            is_correct = question.check_answer(user_answer)
-            
-            if question_id in mandatory_ids:
-                if is_correct:
-                    mandatory_correct += 1
-            else:
-                if is_correct:
-                    optional_correct += 1
-                    
-        except (Question.DoesNotExist, ValueError):
-            continue
-    
-    # 1. SCORES BRUTS
-    self.mandatory_score = mandatory_correct  # /9
-    self.optional_score = optional_correct    # /12
-    self.total_score = mandatory_correct + optional_correct  # /21
-    
-    # 2. RÉUSSITE
-    self.passed = (mandatory_correct == 9)
-    
-    # 3. SAUVEGARDER
-    self.save()
-    
-    return {
-        'total': self.total_score,
-        'mandatory': self.mandatory_score,
-        'optional': self.optional_score,
-        'passed': self.passed
-    }
+    def calculate_scores(self):
+        """Calculer tous les scores d'une tentative"""
+        if not self.user_answers:
+            return {
+                'total': 0,
+                'mandatory': 0,
+                'optional': 0,
+                'passed': False
+            }
+        
+        mandatory_correct = 0
+        optional_correct = 0
+        
+        mandatory_ids = set(self.test.mandatory_questions)
+        
+        for question_id_str, user_answer in self.user_answers.items():
+            try:
+                question_id = int(question_id_str)
+                question = Question.objects.get(id=question_id)
+                
+                # Gérer le format des réponses
+                if isinstance(user_answer, dict):
+                    user_answer = user_answer.get('answer')
+                
+                if user_answer is None:
+                    continue
+                
+                is_correct = question.check_answer(user_answer)
+                
+                if question_id in mandatory_ids:
+                    if is_correct:
+                        mandatory_correct += 1
+                else:
+                    if is_correct:
+                        optional_correct += 1
+                        
+            except (Question.DoesNotExist, ValueError):
+                continue
+        
+        # Réussite: toutes les questions obligatoires correctes
+        passed = (mandatory_correct == self.mandatory_total)
+        
+        return {
+            'total': mandatory_correct + optional_correct,
+            'mandatory': mandatory_correct,
+            'optional': optional_correct,
+            'passed': passed
+        }

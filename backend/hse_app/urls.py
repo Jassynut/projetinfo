@@ -7,6 +7,7 @@ urlpatterns = [
     path('users/search/', views.search_hse_user_by_cin, name='search_hse_user'),
     path('users/create/', views.create_hse_user, name='create_hse_user'),
     path('users/', views.list_hse_users, name='list_hse_users'),
+    path('users/<int:user_id>/presence/', views.update_user_presence, name='update_presence'),  # ← AJOUTÉ ICI
     
     # Tests HSE
     path('tests/', views.list_hse_tests, name='list_hse_tests'),

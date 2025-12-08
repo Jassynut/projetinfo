@@ -1,0 +1,246 @@
+from rest_framework import viewsets, status, permissions
+from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.response import Response
+from rest_framework.pagination import PageNumberPagination
+from django.shortcuts import get_object_or_404
+from django.utils import timezone
+
+from .models import Test, TestAttempt, Question
+from .serializers_api import (
+    TestListSerializer, TestDetailSerializer, TestCreateUpdateSerializer,
+    TestAttemptListSerializer, TestAttemptDetailSerializer,
+    TestAttemptStartSerializer, TestAttemptSubmitSerializer
+)
+from hse_app.models import HSEUser
+
+# =============================================================================
+# VIEWSETS TESTS
+# =============================================================================
+
+class TestViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet pour gérer les tests HSE
+    
+    Endpoints:
+    - GET /api/tests/ - Lister tous les tests actifs
+    - POST /api/tests/ - Créer un test (Admin seulement)
+    - GET /api/tests/{id}/ - Détails d'un test
+    - PUT /api/tests/{id}/ - Modifier un test (Admin seulement)
+    - PATCH /api/tests/{id}/ - Modification partielle (Admin seulement)
+    - DELETE /api/tests/{id}/ - Supprimer un test (Admin seulement)
+    - GET /api/tests/{id}/results/ - Résultats du test
+    """
+    
+    queryset = Test.objects.filter(is_active=True)
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = PageNumberPagination
+    
+    def get_serializer_class(self):
+        if self.action == 'retrieve':
+            return TestDetailSerializer
+        elif self.action in ['create', 'update', 'partial_update']:
+            return TestCreateUpdateSerializer
+        return TestListSerializer
+    
+    def get_queryset(self):
+        queryset = Test.objects.all()
+        
+        if not self.request.user.is_staff:
+            queryset = queryset.filter(is_active=True)
+        
+        # Filtrer par version
+        version = self.request.query_params.get('version')
+        if version:
+            queryset = queryset.filter(version=version)
+        
+        return queryset.order_by('version')
+    
+    def create(self, request, *args, **kwargs):
+        """Créer un nouveau test (Admin seulement)"""
+        if not request.user.is_staff:
+            return Response({
+                'success': False,
+                'error': 'Accès refusé. Seuls les administrateurs peuvent créer des tests.'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        return super().create(request, *args, **kwargs)
+    
+    @action(detail=True, methods=['get'])
+    def results(self, request, pk=None):
+        """Récupérer les résultats d'un test"""
+        test = self.get_object()
+        attempts = TestAttempt.objects.filter(test=test, status='passed').order_by('-completed_at')
+        
+        serializer = TestAttemptListSerializer(attempts, many=True)
+        
+        total_attempts = TestAttempt.objects.filter(test=test).count()
+        passed_attempts = attempts.count()
+        
+        return Response({
+            'success': True,
+            'test_version': test.version,
+            'total_attempts': total_attempts,
+            'passed_attempts': passed_attempts,
+            'pass_rate': round((passed_attempts / total_attempts * 100) if total_attempts > 0 else 0, 1),
+            'results': serializer.data
+        })
+
+
+# =============================================================================
+# VIEWSETS TEST ATTEMPTS
+# =============================================================================
+
+class TestAttemptViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet pour gérer les tentatives de test
+    
+    Endpoints:
+    - GET /api/test-attempts/ - Lister mes tentatives
+    - POST /api/test-attempts/start/ - Démarrer un test
+    - GET /api/test-attempts/{id}/ - Détails d'une tentative
+    - POST /api/test-attempts/{id}/submit/ - Soumettre les réponses
+    """
+    
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = PageNumberPagination
+    
+    def get_serializer_class(self):
+        if self.action == 'retrieve':
+            return TestAttemptDetailSerializer
+        elif self.action == 'start':
+            return TestAttemptStartSerializer
+        elif self.action == 'submit':
+            return TestAttemptSubmitSerializer
+        return TestAttemptListSerializer
+    
+    def get_queryset(self):
+        """Retourner uniquement les tentatives de l'utilisateur actuel"""
+        return TestAttempt.objects.filter(user=self.request.user).order_by('-started_at')
+    
+    @action(detail=False, methods=['post'])
+    def start(self, request):
+        """Démarrer une nouvelle tentative de test"""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        test_id = serializer.validated_data['test_id']
+        langue = serializer.validated_data['langue']
+        
+        try:
+            test = Test.objects.get(id=test_id, is_active=True)
+        except Test.DoesNotExist:
+            return Response({
+                'success': False,
+                'error': 'Test non trouvé'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Vérifier si une tentative est déjà en cours
+        existing_attempt = TestAttempt.objects.filter(
+            user=request.user,
+            test=test,
+            status='in_progress'
+        ).first()
+        
+        if existing_attempt:
+            return Response({
+                'success': True,
+                'message': 'Tentative déjà en cours',
+                'attempt': TestAttemptDetailSerializer(existing_attempt).data
+            })
+        
+        # Créer une nouvelle tentative
+        attempt = TestAttempt.objects.create(
+            user=request.user,
+            test=test,
+            langue=langue,
+            status='in_progress',
+            mandatory_total=test.mandatory_questions_count,
+            optional_total=test.optional_questions_count
+        )
+        
+        serializer = TestAttemptDetailSerializer(attempt)
+        return Response({
+            'success': True,
+            'message': 'Test démarré',
+            'attempt': serializer.data
+        }, status=status.HTTP_201_CREATED)
+    
+    @action(detail=True, methods=['post'])
+    def submit(self, request, pk=None):
+        """Soumettre les réponses et calculer le score"""
+        attempt = self.get_object()
+        
+        # Vérifier que l'utilisateur peut soumettre cette tentative
+        if attempt.user != request.user:
+            return Response({
+                'success': False,
+                'error': 'Accès refusé'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        # Vérifier que la tentative est en cours
+        if attempt.status != 'in_progress':
+            return Response({
+                'success': False,
+                'error': 'Cette tentative n\'est pas en cours'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        user_answers = serializer.validated_data['user_answers']
+        time_taken = serializer.validated_data.get('time_taken_seconds', 0)
+        
+        # Stocker les réponses
+        attempt.user_answers = user_answers
+        attempt.time_taken_seconds = time_taken
+        attempt.completed_at = timezone.now()
+        
+        # Calculer les scores
+        scores = attempt.calculate_scores()
+        
+        attempt.mandatory_correct = scores['mandatory']
+        attempt.optional_correct = scores['optional']
+        attempt.passed = scores['passed']
+        attempt.status = 'passed' if scores['passed'] else 'failed'
+        
+        # Calculer les pourcentages
+        attempt.mandatory_score_percentage = (scores['mandatory'] / attempt.mandatory_total * 100) if attempt.mandatory_total > 0 else 0
+        attempt.optional_score_percentage = (scores['optional'] / attempt.optional_total * 100) if attempt.optional_total > 0 else 0
+        attempt.overall_score_percentage = ((scores['mandatory'] + scores['optional']) / (attempt.mandatory_total + attempt.optional_total) * 100) if (attempt.mandatory_total + attempt.optional_total) > 0 else 0
+        
+        attempt.save()
+        
+        # Mettre à jour le score de l'utilisateur HSE si lié
+        try:
+            hse_user = HSEUser.objects.get(test_user=request.user)
+            hse_user.score = int(attempt.overall_score_percentage * 0.21)  # Score sur 21
+            hse_user.reussite = attempt.passed
+            hse_user.save()
+        except HSEUser.DoesNotExist:
+            pass
+        
+        response_data = TestAttemptDetailSerializer(attempt).data
+        response_data['scores'] = scores
+        
+        return Response({
+            'success': True,
+            'message': 'Test soumis avec succès',
+            'attempt': response_data
+        })
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def user_test_attempts(request):
+    """Récupérer toutes les tentatives de l'utilisateur"""
+    attempts = TestAttempt.objects.filter(user=request.user).order_by('-started_at')
+    
+    serializer = TestAttemptListSerializer(attempts, many=True)
+    
+    return Response({
+        'success': True,
+        'user_cin': request.user.cin,
+        'attempts_count': attempts.count(),
+        'passed_count': attempts.filter(passed=True).count(),
+        'attempts': serializer.data
+    })

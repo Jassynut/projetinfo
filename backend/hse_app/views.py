@@ -254,7 +254,8 @@ def list_hse_tests(request):
         'tests': tests_data,
         'count': len(tests_data)
     })
-# hse_app/views.py - AJOUTE CETTE FONCTION SI ELLE N'EXISTE PAS
+
+
 def get_hse_test_details(request, version):
     """Détails d'un test HSE spécifique"""
     try:
@@ -262,6 +263,8 @@ def get_hse_test_details(request, version):
         # ... ta logique pour retourner les détails du test
     except Test.DoesNotExist:
         return JsonResponse({'success': False, 'error': f'Test version {version} non trouvé'})
+
+
 @csrf_exempt
 @login_required
 def submit_hse_test_answers(request, attempt_id):
@@ -318,6 +321,72 @@ def submit_hse_test_answers(request, attempt_id):
                 if is_correct:
                     optional_correct += 1
                                     
+        # Mettre à jour les scores
+        attempt.mandatory_correct = mandatory_correct
+        attempt.mandatory_wrong = len(mandatory_ids) - mandatory_correct
+        attempt.mandatory_total = len(mandatory_ids)
+        attempt.optional_correct = optional_correct
+        attempt.optional_wrong = test.total_questions - len(mandatory_ids) - optional_correct
+        attempt.optional_total = test.total_questions - len(mandatory_ids)
+        attempt.mandatory_score_percentage = round((mandatory_correct / len(mandatory_ids) * 100), 2) if len(mandatory_ids) > 0 else 0
+        attempt.optional_score_percentage = round((optional_correct / attempt.optional_total * 100), 2) if attempt.optional_total > 0 else 0
+        attempt.overall_score_percentage = round(((mandatory_correct + optional_correct) / test.total_questions * 100), 2) if test.total_questions > 0 else 0
+        attempt.passed = mandatory_correct == len(mandatory_ids)
+        attempt.status = 'passed' if attempt.passed else 'failed'
+        
+        attempt.save()
+        
+        # Mettre à jour les statistiques de l'utilisateur HSE
+        try:
+            hse_user = HSEUser.objects.get(cin=request.user.cin)
+            hse_user.score = attempt.overall_score_percentage
+            hse_user.reussite = attempt.passed
+            hse_user.save()
+        except HSEUser.DoesNotExist:
+            # Créer un utilisateur HSE si non existant
+            HSEUser.objects.create(
+                nom=request.user.last_name or '',
+                prénom=request.user.first_name or request.user.username,
+                cin=request.user.cin,
+                email=request.user.email or '',
+                entite='',
+                entreprise='',
+                score=attempt.overall_score_percentage,
+                reussite=attempt.passed,
+                presence=True
+            )
+            
+        return JsonResponse({
+            'success': True,
+            'results': {
+                'passed': attempt.passed,
+                'mandatory': {
+                    'correct': mandatory_correct,
+                    'total': len(mandatory_ids),
+                    'percentage': attempt.mandatory_score_percentage,
+                    'passed': mandatory_correct == len(mandatory_ids)
+                },
+                'optional': {
+                    'correct': optional_correct,
+                    'total': attempt.optional_total,
+                    'percentage': attempt.optional_score_percentage
+                },
+                'overall': {
+                    'correct': mandatory_correct + optional_correct,
+                    'total': test.total_questions,
+                    'percentage': attempt.overall_score_percentage
+                },
+                'time_taken_seconds': attempt.time_taken_seconds
+            },
+            'message': 'Test soumis avec succès'
+        })
+            
+    return JsonResponse({
+        'success': False,
+        'error': 'Méthode non autorisée'
+    }, status=405)
+
+
 # ==================== API TEST ATTEMPTS ====================
 
 @csrf_exempt
@@ -418,161 +487,6 @@ def start_hse_test_attempt(request):
             return JsonResponse({
                 'success': False,
                 'error': f'Erreur: {str(e)}'
-            }, status=500)
-    
-    return JsonResponse({
-        'success': False,
-        'error': 'Méthode non autorisée'
-    }, status=405)
-
-
-@csrf_exempt
-@login_required
-def submit_hse_test_answers(request, attempt_id):
-    """
-    Soumettre les réponses d'un test HSE
-    POST: /api/hse/test-attempts/{attempt_id}/submit/
-    {
-        "answers": {
-            "1": {"answer": true, "is_mandatory": true},
-            "2": {"answer": false, "is_mandatory": false},
-            ...
-        }
-    }
-    """
-    if request.method == 'POST':
-        try:
-            data = json.loads(request.body)
-            user_answers = data.get('answers', {})
-            
-            # Récupérer la tentative
-            attempt = TestAttempt.objects.get(
-                id=attempt_id,
-                user=request.user,
-                status='in_progress'
-            )
-            
-            # Mettre à jour les réponses
-            attempt.user_answers = user_answers
-            attempt.completed_at = datetime.now()
-            
-            # Calculer le temps pris
-            if attempt.started_at and attempt.completed_at:
-                time_taken = attempt.completed_at - attempt.started_at
-                attempt.time_taken_seconds = int(time_taken.total_seconds())
-            
-            # Calculer les scores (version simple)
-            test = attempt.test
-            mandatory_ids = set(test.mandatory_questions)
-            
-            mandatory_correct = 0
-            optional_correct = 0
-            
-            for question_id_str, answer_data in user_answers.items():
-                try:
-                    question_id = int(question_id_str)
-                    question = Question.objects.get(id=question_id)
-                    
-                    user_answer = answer_data.get('answer')
-                    if user_answer is None:
-                        continue
-                    
-                    # Vérifier la réponse
-                    is_correct = question.check_answer(user_answer)
-                    
-                    if question_id in mandatory_ids:
-                        if is_correct:
-                            mandatory_correct += 1
-                    else:
-                        if is_correct:
-                            optional_correct += 1
-                            
-                except (Question.DoesNotExist, ValueError):
-                    continue
-            
-            # Calculer les pourcentages
-            total_mandatory = test.mandatory_questions_count
-            total_optional = test.optional_questions_count
-            
-            mandatory_percentage = (mandatory_correct / total_mandatory * 100) if total_mandatory > 0 else 0
-            optional_percentage = (optional_correct / total_optional * 100) if total_optional > 0 else 0
-            total_questions = total_mandatory + total_optional
-            total_correct = mandatory_correct + optional_correct
-            overall_percentage = (total_correct / total_questions * 100) if total_questions > 0 else 0
-            
-            # Déterminer si le test est réussi
-            # Règle: Toutes les questions obligatoires doivent être correctes
-            passed = mandatory_correct == total_mandatory
-            
-            # Mettre à jour les scores
-            attempt.mandatory_correct = mandatory_correct
-            attempt.mandatory_wrong = total_mandatory - mandatory_correct
-            attempt.mandatory_total = total_mandatory
-            attempt.optional_correct = optional_correct
-            attempt.optional_wrong = total_optional - optional_correct
-            attempt.optional_total = total_optional
-            attempt.mandatory_score_percentage = round(mandatory_percentage, 2)
-            attempt.optional_score_percentage = round(optional_percentage, 2)
-            attempt.overall_score_percentage = round(overall_percentage, 2)
-            attempt.passed = passed
-            attempt.status = 'passed' if passed else 'failed'
-            
-            attempt.save()
-            
-            # Mettre à jour les statistiques de l'utilisateur HSE
-            try:
-                hse_user = HSEUser.objects.get(cin=request.user.cin)
-                hse_user.score = round(overall_percentage)
-                hse_user.reussite = passed
-                hse_user.save()
-            except HSEUser.DoesNotExist:
-                # Créer un utilisateur HSE si non existant
-                HSEUser.objects.create(
-                    nom=request.user.last_name or '',
-                    prénom=request.user.first_name or '',
-                    cin=request.user.cin,
-                    email=request.user.email or '',
-                    entite='',
-                    entreprise='',
-                    score=round(overall_percentage),
-                    reussite=passed,
-                    presence=True
-                )
-            
-            return JsonResponse({
-                'success': True,
-                'results': {
-                    'passed': passed,
-                    'mandatory': {
-                        'correct': mandatory_correct,
-                        'total': total_mandatory,
-                        'percentage': round(mandatory_percentage, 2),
-                        'passed': mandatory_correct == total_mandatory
-                    },
-                    'optional': {
-                        'correct': optional_correct,
-                        'total': total_optional,
-                        'percentage': round(optional_percentage, 2)
-                    },
-                    'overall': {
-                        'correct': total_correct,
-                        'total': total_questions,
-                        'percentage': round(overall_percentage, 2)
-                    },
-                    'time_taken_seconds': attempt.time_taken_seconds
-                },
-                'message': 'Test soumis avec succès'
-            })
-            
-        except TestAttempt.DoesNotExist:
-            return JsonResponse({
-                'success': False,
-                'error': 'Tentative non trouvée'
-            }, status=404)
-        except Exception as e:
-            return JsonResponse({
-                'success': False,
-                'error': f'Erreur soumission: {str(e)}'
             }, status=500)
     
     return JsonResponse({
@@ -864,4 +778,53 @@ def sync_test_users_with_hse(request):
         return JsonResponse({
             'success': False,
             'error': f'Erreur synchronisation: {str(e)}'
+        }, status=500)
+
+
+# ==================== API MODIFICATION DE PRÉSENCE ====================
+
+@csrf_exempt
+@login_required
+def update_user_presence(request, user_id):
+    """
+    Modifier la présence d'un utilisateur HSE
+    PATCH: /api/hse/users/{user_id}/presence/
+    {
+        "presence": true
+    }
+    """
+    if not request.user.is_staff:
+        return JsonResponse({
+            'success': False,
+            'error': 'Accès non autorisé'
+        }, status=403)
+    
+    try:
+        user = HSEUser.objects.get(id=user_id)
+        
+        if request.method == 'PATCH':
+            data = json.loads(request.body)
+            user.presence = data.get('presence', user.presence)
+            user.save()
+            
+            return JsonResponse({
+                'success': True,
+                'user': {
+                    'id': user.id,
+                    'full_name': user.get_full_name(),
+                    'presence': user.presence,
+                    'updated_at': user.updated_at.isoformat()
+                },
+                'message': 'Présence mise à jour avec succès'
+            })
+    
+    except HSEUser.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Utilisateur non trouvé'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': f'Erreur: {str(e)}'
         }, status=500)
