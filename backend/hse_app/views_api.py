@@ -181,7 +181,7 @@ class HSEManagerViewSet(viewsets.ModelViewSet):
     """
     
     queryset = HSEManager.objects.all()
-    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+    permission_classes = [permissions.IsAuthenticated]
     
     def get_serializer_class(self):
         if self.action == 'retrieve':

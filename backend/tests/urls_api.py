@@ -3,7 +3,7 @@ from rest_framework.routers import DefaultRouter
 from .views_api import TestViewSet, TestAttemptViewSet, user_test_attempts
 
 router = DefaultRouter()
-router.register(r'viewsets', TestViewSet, basename='test')
+router.register(r'', TestViewSet, basename='test-viewset')
 router.register(r'attempts', TestAttemptViewSet, basename='test-attempt')
 
 urlpatterns = [

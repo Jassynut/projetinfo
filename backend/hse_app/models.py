@@ -80,12 +80,13 @@ class HSEUser(models.Model):
 
 class HSEManager(models.Model):
     """Manager pour les opérations HSE spécifiques"""
-    name = models.CharField(max_length=100, verbose_name="Nom du manager")
+    full_name = models.CharField(max_length=100, verbose_name="Nom complet")
     cin = models.CharField(max_length=50, unique=True, verbose_name="CIN")    
+    
     class Meta:
         verbose_name = "Manager HSE"
         verbose_name_plural = "Managers HSE"
-        ordering = ['name']
+        ordering = ['full_name']
     
     def __str__(self):
-        return f"{self.name} ({self.cin})"
+        return f"{self.full_name} ({self.cin})"

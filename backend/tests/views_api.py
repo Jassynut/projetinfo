@@ -213,7 +213,8 @@ class TestAttemptViewSet(viewsets.ModelViewSet):
         # Mettre à jour le score de l'utilisateur HSE si lié
         try:
             hse_user = HSEUser.objects.get(test_user=request.user)
-            hse_user.score = int(attempt.overall_score_percentage * 0.21)  # Score sur 21
+            # Score = (pourcentage / 100) * 21
+            hse_user.score = round((attempt.overall_score_percentage / 100) * 21)
             hse_user.reussite = attempt.passed
             hse_user.save()
         except HSEUser.DoesNotExist:

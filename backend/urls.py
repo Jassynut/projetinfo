@@ -17,13 +17,7 @@ urlpatterns = [
     # API Certificats (REST Framework)
     path('api/certificates/', include('certificats.urls_api')),
     
-    # Ancien endpoints (legacy)
-    path('api/hse-old/', include('hse_app.urls')),
-    path('api/tests-old/', include('tests.urls')),
-    path('api/certificates-old/', include('certificats.urls')),
-    
-    # Admin
-    path('admin/', admin.site.urls),
+    # Authentication views
     path("authentication/", include("authentication.urls")),
     path("manager/login/", views.manager_login, name="manager_login"),
     path("user/current/", views.get_current_user, name="get_current_user"),
