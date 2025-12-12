@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import axios from "axios";
 
 const API_BASE = "http://127.0.0.1:8000";
@@ -8,6 +9,7 @@ const TEST_DURATION_SECONDS = 600; // 10 minutes
 export default function PasserTest() {
   const { id } = useParams(); // test id or version
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [questions, setQuestions] = useState([]);
   const [answers, setAnswers] = useState({});
   const [current, setCurrent] = useState(0);
@@ -36,8 +38,12 @@ export default function PasserTest() {
 
   // Fetch questions on mount
   useEffect(() => {
+    const cniParam = searchParams.get("cni");
+    if (cniParam) {
+      sessionStorage.setItem("cni", cniParam.toUpperCase());
+    }
     fetchQuestions();
-  }, [id]);
+  }, [id, searchParams]);
 
   const fetchQuestions = async () => {
     setLoading(true);

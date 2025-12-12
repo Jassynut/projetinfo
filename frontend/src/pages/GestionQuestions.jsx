@@ -98,7 +98,6 @@ export default function GestionQuestions() {
       payload.append("question_code", form.question_code);
       payload.append("enonce_fr", form.enonce_fr);
       payload.append("reponse_correcte", form.reponse_correcte);
-      if (form.categorie) payload.append("categorie", form.categorie);
       if (form.image) payload.append("image", form.image);
 
       if (editingQuestion) {
@@ -112,12 +111,7 @@ export default function GestionQuestions() {
       }
 
       // associer à une version si fournie
-      if (form.version_id) {
-        const versionId = form.version_id;
-        await axios.post(`${API_BASE}/api/versions/${versionId}/questions`, {
-          question_id: editingQuestion?.id, // si edit
-        });
-      }
+      // association version retirée pour éviter l'appel invalide après création
 
       setShowModal(false);
       fetchQuestions();

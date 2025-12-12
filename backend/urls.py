@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.urls import path, include
 from django.http import HttpResponseRedirect
 from authentication import views
+from tests.views_api import list_versions, list_active_versions, version_detail
 
 # Fonction pour rediriger vers le front-end React
 def redirect_to_front(request):
@@ -21,6 +22,11 @@ urlpatterns = [
 
     # HSE API
     path('api/hse/', include('hse_app.urls_api')),
+
+    # ALIAS PUBLICS VERSIONS (contournent l'auth du ViewSet)
+    path('api/versions', list_versions, name='api-versions-list'),
+    path('api/versions/actives', list_active_versions, name='api-versions-actives'),
+    path('api/versions/<int:pk>', version_detail, name='api-versions-detail'),
 
     # TESTS API
     path('api/tests/', include('tests.urls_api')),

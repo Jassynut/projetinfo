@@ -5,6 +5,7 @@ from rest_framework.pagination import PageNumberPagination
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.core.cache import cache
+from django.db import IntegrityError
 
 from .models import Test, TestAttempt, Question
 from .serializers_api import (
@@ -253,12 +254,56 @@ def user_test_attempts(request):
 # ALIAS / ENDPOINTS FRONTEND COMPAT (versions/questions publics)
 # =============================================================================
 
-@api_view(['GET'])
+@api_view(['GET', 'POST'])
 @permission_classes([permissions.AllowAny])
 def list_versions(request):
+    if request.method == 'POST':
+        # Création simplifiée : si version non fournie, auto-increment
+        version = request.data.get('version')
+        description = request.data.get('description') or request.data.get('name') or ''
+        if not version:
+            last = Test.objects.order_by('-version').first()
+            version = (last.version + 1) if last else 1
+        try:
+            version = int(version)
+        except (TypeError, ValueError):
+            return Response({'success': False, 'error': 'Version invalide'}, status=400)
+        try:
+            test = Test.objects.create(
+                version=version,
+                description=description,
+                ordre_questions=[],
+                mandatory_questions=[],
+                total_questions=21,
+                mandatory_questions_count=9,
+                is_active=True,
+            )
+        except IntegrityError as exc:
+            return Response({'success': False, 'error': str(exc)}, status=400)
+        except Exception as exc:
+            return Response({'success': False, 'error': str(exc)}, status=500)
+        return Response(
+            {
+                'success': True,
+                'version': {
+                    'id': test.id,
+                    'version': test.version,
+                    'description': test.description,
+                    'name': f"Version {test.version}",
+                    'total_questions': test.total_questions,
+                    'created_at': test.created_at,
+                },
+            },
+            status=201,
+        )
+
     qs = Test.objects.all().order_by('version')
-    serializer = TestListSerializer(qs, many=True)
-    return Response({'versions': serializer.data})
+    data = []
+    for t in qs:
+        item = TestListSerializer(t).data
+        item['name'] = f"Version {t.version}"
+        data.append(item)
+    return Response({'versions': data})
 
 
 @api_view(['GET'])
@@ -266,7 +311,37 @@ def list_versions(request):
 def list_active_versions(request):
     qs = Test.objects.filter(is_active=True).order_by('version')
     serializer = TestListSerializer(qs, many=True)
-    return Response({'versions': serializer.data})
+    data = serializer.data
+    # ajouter 'name' pour le frontend
+    for item in data:
+        item['name'] = f"Version {item.get('version')}"
+    return Response({'versions': data})
+
+
+@api_view(['GET', 'PUT', 'DELETE'])
+@permission_classes([permissions.AllowAny])
+def version_detail(request, pk):
+    test = get_object_or_404(Test, pk=pk)
+    if request.method == 'GET':
+        data = TestDetailSerializer(test).data
+        data['name'] = f"Version {test.version}"
+        return Response(data)
+    if request.method == 'PUT':
+        description = request.data.get('description') or ''
+        version = request.data.get('version') or request.data.get('name')
+        try:
+            if version:
+                test.version = int(version) if str(version).isdigit() else test.version
+        except (TypeError, ValueError):
+            pass
+        test.description = description
+        test.save()
+        data = TestDetailSerializer(test).data
+        data['name'] = f"Version {test.version}"
+        return Response({'success': True, 'version': data})
+    # DELETE
+    test.delete()
+    return Response({'success': True})
 
 
 @api_view(['GET'])

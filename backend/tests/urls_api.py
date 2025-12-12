@@ -8,6 +8,7 @@ from .views_api import (
     list_active_versions,
     version_questions,
     version_add_question,
+    version_detail,
     verify_cni,
     test_questions_public,
     test_submit_answer,
@@ -27,6 +28,7 @@ urlpatterns = [
     # Alias "versions" pour compat frontend
     path('versions', list_versions, name='versions-list'),
     path('versions/actives', list_active_versions, name='versions-active'),
+    path('versions/<int:pk>', version_detail, name='versions-detail'),
     path('versions/<int:pk>/questions', version_questions, name='versions-questions'),
     path('versions/<int:pk>/questions/add', version_add_question, name='versions-questions-add'),
     # Endpoints apprenant alignés maquette

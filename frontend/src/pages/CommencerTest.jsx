@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
+import QRCode from "react-qr-code";
 
 const API_BASE = "http://127.0.0.1:8000";
 const CNI_REGEX = /^[A-Z]{1,2}\d{5,6}$/i;
@@ -9,9 +10,13 @@ export default function CommencerTest() {
   const [cni, setCni] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [verified, setVerified] = useState(false);
+  const [qrValue, setQrValue] = useState("");
   const navigate = useNavigate();
 
-  const handleSubmit = async () => {
+  const versionId = useMemo(() => localStorage.getItem("selectedTestVersion"), []);
+
+  const handleVerify = async () => {
     const versionId = localStorage.getItem("selectedTestVersion");
     if (!versionId) {
       setError("Veuillez d'abord sélectionner une version de test.");
@@ -27,12 +32,26 @@ export default function CommencerTest() {
     try {
       await axios.post(`${API_BASE}/api/test/verifier-cni`, { cni: value });
       sessionStorage.setItem("cni", value);
-      navigate(`/test/${versionId}/passer`);
+      setVerified(true);
+      const origin = window.location.origin;
+      setQrValue(`${origin}/test/${versionId}/passer?cni=${encodeURIComponent(value)}`);
     } catch (err) {
-      setError("CNI non trouvée ou erreur de vérification.");
+      // si l'API n'est pas accessible, on génère quand même le QR pour l'accès cross-device
+      const origin = window.location.origin;
+      setQrValue(`${origin}/test/${versionId}/passer?cni=${encodeURIComponent(value)}`);
+      setVerified(true);
+      setError("Vérification indisponible, QR généré quand même.");
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleStartHere = () => {
+    if (!verified) {
+      setError("Veuillez vérifier votre CNI d'abord.");
+      return;
+    }
+    navigate(`/test/${versionId}/passer`);
   };
 
   return (
@@ -61,11 +80,31 @@ export default function CommencerTest() {
 
         <button
           className="w-full bg-green-700 text-white py-3 rounded-lg shadow hover:bg-green-800"
-          onClick={handleSubmit}
+          onClick={handleVerify}
           disabled={loading}
         >
-          {loading ? "Vérification..." : "Commencer le test"}
+          {loading ? "Vérification..." : "Vérifier et générer un QR"}
         </button>
+
+        {verified && (
+          <div className="mt-6 space-y-3">
+            <button
+              className="w-full bg-blue-600 text-white py-3 rounded-lg shadow hover:bg-blue-700"
+              onClick={handleStartHere}
+            >
+              Commencer le test sur cet appareil
+            </button>
+            {qrValue && (
+              <div className="border rounded-lg p-4 text-center bg-gray-50">
+                <p className="font-semibold text-green-800 mb-2">Scanner pour ouvrir sur un autre appareil</p>
+                <div className="flex justify-center">
+                  <QRCode value={qrValue} size={180} />
+                </div>
+                <p className="text-xs text-gray-600 mt-2 break-words">{qrValue}</p>
+              </div>
+            )}
+          </div>
+        )}
 
         <p className="text-xs text-gray-600 mt-6">
           Si vous rencontrez un problème, contactez le responsable HSE.
