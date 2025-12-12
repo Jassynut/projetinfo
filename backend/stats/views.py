@@ -4,30 +4,30 @@ from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from django.views import View
 import json
+import pandas as pd
+import datetime
+import os
 
-# Vue pour la page principale
+
+# ------------------------------
+#  PAGE HTML CLASSIQUE (optionnel pour toi)
+# ------------------------------
+
 def hse_dashboard(request):
-    """
-    Vue principale pour le portail HSE
-    """
-    context = {
+    return render(request, 'hse/stats.html', {
         'page_title': 'Induction HSE - Jorf Lasfar',
         'year': 2025
-    }
-    return render(request, 'hse/stats.html', context)
+    })
 
-# API views pour les données
+
+# ------------------------------
+#  API : Questionnaires + certificats (déjà fourni)
+# ------------------------------
+
 @method_decorator(csrf_exempt, name='dispatch')
 class HSEApiView(View):
-    """
-    Vue API pour gérer les opérations HSE
-    """
-    
     def get(self, request, *args, **kwargs):
-        """
-        Récupérer les données HSE (questionnaires, certificats, etc.)
-        """
-        # Données simulées pour les questionnaires
+
         questionnaires = [
             {
                 'id': 1,
@@ -52,54 +52,111 @@ class HSEApiView(View):
                 'certificats_generes': 0
             }
         })
-    
-    def post(self, request, *args, **kwargs):
-        """
-        Commencer un test ou générer un certificat
-        """
-        try:
-            data = json.loads(request.body)
-            action = data.get('action')
-            
-            if action == 'commencer_test':
-                questionnaire_id = data.get('questionnaire_id')
-                # Logique pour commencer un test
-                return JsonResponse({
-                    'success': True,
-                    'message': 'Test démarré avec succès',
-                    'test_id': f"test_{questionnaire_id}_{request.user.id}"
-                })
-                
-            elif action == 'generer_certificat':
-                # Logique pour générer un certificat
-                return JsonResponse({
-                    'success': True,
-                    'message': 'Certificat généré avec succès',
-                    'certificat_url': '/certificats/certificat_12345.pdf'
-                })
-                
-            else:
-                return JsonResponse({
-                    'success': False,
-                    'message': 'Action non reconnue'
-                }, status=400)
-                
-        except json.JSONDecodeError:
-            return JsonResponse({
-                'success': False,
-                'message': 'Données JSON invalides'
-            }, status=400)
 
-# Vue pour la gestion des questionnaires
+
+# ------------------------------
+#  API STATISTIQUES HSE POUR REACT
+#  (C’est ici que ton Dashboard HSE vient chercher les données)
+# ------------------------------
+
+def hse_stats(request):
+    """
+    Retourne les statistiques HSE sous forme JSON
+    pour le frontend React.
+    """
+
+    # 1️⃣ Lire la date passée dans l'URL
+    day = request.GET.get("day")
+    month = request.GET.get("month")
+    year = request.GET.get("year")
+
+    # 2️⃣ Si aucune date → date d'aujourd'hui
+    if not (day and month and year):
+        today = datetime.date.today()
+        day = today.day
+        month = today.month
+        year = today.year
+
+    # 3️⃣ Construire le chemin du fichier Excel
+    file_path = f"backend/data/{day}-{month}-{year}.xlsx"
+
+    if not os.path.exists(file_path):
+        return JsonResponse({
+            "error": "Fichier du jour introuvable",
+            "file_searched": file_path
+        }, status=404)
+
+    # 4️⃣ Charger Excel
+    df = pd.read_excel(file_path)
+
+    # 5️⃣ Exemple de calculs
+    presence = int(df["Présence"].mean() * 100)
+    test_initial = int(df["Test initial"].mean() * 100)
+    test_final = int(df["Test final"].mean() * 100)
+
+    # 6️⃣ Retour JSON parfait pour React
+    return JsonResponse({
+        "presence": presence,
+        "test_initial": test_initial,
+        "test_final": test_final,
+        "improvement": test_final - test_initial
+    })
+
+
+# ------------------------------
+#  HTML optionnel
+# ------------------------------
+
 def gestion_questionnaires(request):
-    """
-    Vue pour la gestion des questionnaires
-    """
     return render(request, 'hse/gestion_questionnaires.html')
 
-# Vue pour la génération de certificats
 def generation_certificats(request):
-    """
-    Vue pour la génération de certificats
-    """
     return render(request, 'hse/generation_certificats.html')
+
+
+
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+import pandas as pd
+
+@csrf_exempt
+def upload_excel(request):
+    if request.method == "POST":
+        excel_file = request.FILES.get("file")
+
+        if not excel_file:
+            return JsonResponse({"success": False, "error": "Aucun fichier reçu"})
+
+        try:
+            # Lire sans header
+            df_raw = pd.read_excel(excel_file, header=None)
+
+            # Trouver la ligne contenant "Entité" (l'en-tête réelle)
+            header_row = None
+            for i, row in df_raw.iterrows():
+                if row.astype(str).str.contains("Entité").any():
+                    header_row = i
+                    break
+
+            if header_row is None:
+                return JsonResponse({"success": False, "error": "Impossible de trouver l'en-tête dans ce fichier."})
+
+            # Recharger le fichier en utilisant la ligne trouvée comme header
+            df = pd.read_excel(excel_file, header=header_row)
+
+            # Supprimer colonnes 'Unnamed'
+            df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
+
+            # Supprimer lignes vides
+            df = df.dropna(how="all")
+
+            # Reset index
+            df = df.reset_index(drop=True)
+
+            return JsonResponse({"success": True, "data": df.to_dict(orient="records")})
+
+        except Exception as e:
+            print("🔥 ERREUR DJANGO :", e)
+            return JsonResponse({"success": False, "error": str(e)})
+
+    return JsonResponse({"success": False, "error": "Méthode non autorisée"})
