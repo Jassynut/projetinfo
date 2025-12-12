@@ -12,7 +12,7 @@ def importexcel(excel_file):
         df = pd.read_excel(excel_file)
 
         # Vérification des colonnes obligatoires
-        if not {"cin", "full_name"}.issubset(df.columns.str.lower()):
+        if not {"cin", "name"}.issubset(df.columns.str.lower()):
             return {
                 "status": "error",
                 "message": "Le fichier doit contenir les colonnes CIN et FULL_NAME."
@@ -29,7 +29,7 @@ def importexcel(excel_file):
         with transaction.atomic():
             for _, row in df.iterrows():
                 cin = str(row.get("cin", "")).strip()
-                full_name = str(row.get("full_name", "")).strip()
+                full_name = str(row.get("name", "")).strip()
 
                 if not cin:
                     errors.append(f"Ligne invalide : CIN manquant")
@@ -50,7 +50,7 @@ def importexcel(excel_file):
                             updated_count += 1
                     else:
                         # Création d'un nouvel apprenant (user_type='user')
-                        TestUser.objects.create_hse_user(cin=cin, full_name=full_name)
+                        TestUser.objects.create_hse_user(cin=cin, name=name)
                         created_count += 1
 
                 except Exception as e:
