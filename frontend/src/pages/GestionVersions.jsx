@@ -31,11 +31,18 @@ export default function GestionVersions() {
     setLoading(true);
     setError("");
     try {
-      const res = await axios.get(`${API_BASE}/api/versions`);
-      setVersions(res.data?.versions || res.data?.tests || res.data || []);
+      const resActives = await axios.get(`${API_BASE}/api/versions/actives`);
+      let items = resActives.data?.versions || [];
+      if (!items.length) {
+        const resAll = await axios.get(`${API_BASE}/api/versions`);
+        items = resAll.data?.versions || resAll.data?.tests || resAll.data || [];
+      }
+      items = items.map((v) => ({ ...v, name: v.name || `Version ${v.version}` }));
+      setVersions(items);
     } catch (err) {
       console.error(err);
       setError("Impossible de charger les versions.");
+      setVersions([]);
     } finally {
       setLoading(false);
     }
