@@ -477,9 +477,10 @@ def test_result_public(request, test_id):
 
 
 from rest_framework import viewsets, permissions, status
+from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
-from .models import Question
+from .models import Question, Test
 from .serializers_api import QuestionDetailSerializer
 
 
@@ -487,13 +488,68 @@ class QuestionViewSet(viewsets.ModelViewSet):
     """
     CRUD basique des questions pour compatibilité frontend
     """
-
     queryset = Question.objects.all().order_by('question_code')
     serializer_class = QuestionDetailSerializer
     permission_classes = [permissions.AllowAny]
     authentication_classes = []
     parser_classes = [MultiPartParser, FormParser]
 
+    @action(detail=True, methods=['post'], url_path='associate_version')
+    def associate_version(self, request, pk=None):
+        """
+        Associer cette question à une version de test
+        
+        POST /api/questions/{id}/associate_version/
+        Body: { "test_id": 1 } ou { "version_id": 1 }
+        """
+        question = self.get_object()
+        
+        # Accepte test_id ou version_id
+        test_id = request.data.get('test_id') or request.data.get('version_id')
+        
+        if not test_id:
+            return Response({
+                'success': False,
+                'error': 'test_id ou version_id est requis'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Chercher le test par ID
+            test = Test.objects.get(id=test_id)
+        except Test.DoesNotExist:
+            # Peut-être essayer par numéro de version
+            try:
+                test = Test.objects.get(version=test_id)
+            except (Test.DoesNotExist, ValueError):
+                return Response({
+                    'success': False,
+                    'error': f'Test avec ID/version {test_id} non trouvé'
+                }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Vérifier si la question est déjà dans le test
+        ordre = list(test.ordre_questions or [])
+        
+        if question.id in ordre:
+            return Response({
+                'success': False,
+                'error': f'La question est déjà dans le test version {test.version}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Ajouter la question
+        ordre.append(question.id)
+        test.ordre_questions = ordre
+        test.total_questions = len(ordre)
+        test.save()
+        
+        return Response({
+            'success': True,
+            'message': f'Question "{question.question_code}" ajoutée au test version {test.version}',
+            'test_id': test.id,
+            'version': test.version,
+            'question_id': question.id,
+            'total_questions_in_test': test.total_questions
+        })
+    
     def create(self, request, *args, **kwargs):
         return super().create(request, *args, **kwargs)
 

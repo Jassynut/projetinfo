@@ -14,8 +14,8 @@ export default function GestionQuestions() {
   const [form, setForm] = useState({
     question_code: "",
     enonce_fr: "",
-    enonce_ar:"",
-    enonce_en:"",
+    enonce_ar: "",
+    enonce_en: "",
     categorie: "",
     reponse_correcte: true,
     image: null,
@@ -42,6 +42,7 @@ export default function GestionQuestions() {
     setError("");
     try {
       const res = await axios.get(`${API_BASE}/api/questions/`);
+      // Ajuste selon la structure de ta réponse API
       setQuestions(res.data?.questions || res.data || []);
     } catch (err) {
       setError("Impossible de charger les questions.");
@@ -89,7 +90,7 @@ export default function GestionQuestions() {
       enonce_en: q.enonce_en || "",
       categorie: q.categorie || "",
       reponse_correcte: !!q.reponse_correcte,
-      image: null, // aucune nouvelle image sélectionnée par défaut
+      image: null,
       version_id: q.version_id || "",
     });
     setShowModal(true);
@@ -112,39 +113,58 @@ export default function GestionQuestions() {
       const payload = new FormData();
       payload.append("question_code", form.question_code);
       payload.append("enonce_fr", form.enonce_fr);
-      payload.append("enonce_ar", form.enonce_ar);
-      payload.append("enonce_en", form.enonce_en);
-      payload.append("categorie", form.categorie);
+      payload.append("enonce_ar", form.enonce_ar || "");
+      payload.append("enonce_en", form.enonce_en || "");
       payload.append("reponse_correcte", form.reponse_correcte);
+      payload.append("is_mandatory", false); // Ajoute si nécessaire
+      payload.append("points", 1); // Ajoute si nécessaire
 
       // Ajouter l'image uniquement si elle est sélectionnée
-      if (form.image) payload.append("image", form.image);
+      if (form.image) {
+        payload.append("image", form.image);
+      }
 
       let questionId = null;
 
       if (editingQuestion) {
-        await axios.put(`${API_BASE}/api/questions/${editingQuestion.id}/`, payload, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
+        // Pour PUT, envoie toutes les données
+        const response = await axios.put(
+          `${API_BASE}/api/questions/${editingQuestion.id}/`,
+          payload,
+          {
+            headers: { "Content-Type": "multipart/form-data" },
+          }
+        );
         questionId = editingQuestion.id;
       } else {
-        const res = await axios.post(`${API_BASE}/api/questions/`, payload, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
-        questionId = res.data?.id;
+        // Pour POST, crée une nouvelle question
+        const response = await axios.post(
+          `${API_BASE}/api/questions/`,
+          payload,
+          {
+            headers: { "Content-Type": "multipart/form-data" },
+          }
+        );
+        questionId = response.data?.id || editingQuestion?.id;
       }
 
       // Associer à une version si fournie
       if (form.version_id && questionId) {
-        await axios.post(`${API_BASE}/api/questions/${questionId}/associate_version/`, {
-          version_id: form.version_id,
-        });
+        try {
+          await axios.post(`${API_BASE}/api/versions/${form.version_id}/questions/add`, {
+            question_id: questionId
+          });
+        } catch (assocError) {
+          console.warn("Association échouée, mais question créée:", assocError);
+          // Continue même si l'association échoue
+        }
       }
 
       setShowModal(false);
       fetchQuestions();
     } catch (err) {
-      setError("Échec de l’enregistrement de la question.");
+      console.error("Erreur:", err.response?.data || err.message);
+      setError("Échec de l'enregistrement. " + (err.response?.data?.error || ""));
     } finally {
       setLoading(false);
     }
@@ -199,9 +219,10 @@ export default function GestionQuestions() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-green-50 text-green-700 font-semibold">
-                <th className="p-3 border">#</th>
-                <th className="p-3 border">Question</th>
-                <th className="p-3 border">Catégorie</th>
+                <th className="p-3 border">Code</th>
+                <th className="p-3 border">Question (FR)</th>
+                <th className="p-3 border">Question (AR)</th>
+                <th className="p-3 border">Question (EN)</th>
                 <th className="p-3 border">Réponse correcte</th>
                 <th className="p-3 border text-center">Actions</th>
               </tr>
@@ -209,22 +230,21 @@ export default function GestionQuestions() {
             <tbody>
               {orderedQuestions.map((q, idx) => (
                 <tr key={q.id || idx} className="hover:bg-green-50">
-                  <td className="p-3 border font-semibold">{q.question_code || idx + 1}</td>
+                  <td className="p-3 border font-semibold">{q.question_code || `Q${idx + 1}`}</td>
                   <td className="p-3 border">{q.enonce_fr}</td>
-                  <td className="p-3 border">{q.enonce_ar}</td>
-                  <td className="p-3 border">{q.enonce_en}</td>
-                  <td className="p-3 border">{q.categorie || "—"}</td>
+                  <td className="p-3 border">{q.enonce_ar || "-"}</td>
+                  <td className="p-3 border">{q.enonce_en || "-"}</td>
                   <td className="p-3 border">{q.reponse_correcte ? "Oui" : "Non"}</td>
                   <td className="p-3 border text-center space-x-2">
                     <button
                       onClick={() => openEdit(q)}
-                      className="px-3 py-1 rounded bg-blue-600 text-white"
+                      className="px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-700"
                     >
                       Éditer
                     </button>
                     <button
                       onClick={() => handleDelete(q.id)}
-                      className="px-3 py-1 rounded bg-red-600 text-white"
+                      className="px-3 py-1 rounded bg-red-600 text-white hover:bg-red-700"
                     >
                       Supprimer
                     </button>
@@ -233,7 +253,7 @@ export default function GestionQuestions() {
               ))}
               {!loading && orderedQuestions.length === 0 && (
                 <tr>
-                  <td colSpan="5" className="p-4 text-center text-gray-500">
+                  <td colSpan="6" className="p-4 text-center text-gray-500">
                     Aucune question disponible.
                   </td>
                 </tr>
@@ -263,49 +283,6 @@ export default function GestionQuestions() {
                 />
               </div>
               <div>
-                <label className="block font-medium mb-1">Catégorie</label>
-                <input
-                  className="w-full border rounded-lg p-2"
-                  value={form.categorie}
-                  onChange={(e) => setForm({ ...form, categorie: e.target.value })}
-                  placeholder="Sécurité, EPI..."
-                  disabled={loading}
-                />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block font-medium mb-1">Énoncé français</label>
-                <textarea
-                  className="w-full border rounded-lg p-2"
-                  rows={3}
-                  value={form.enonce_fr}
-                  onChange={(e) => setForm({ ...form, enonce_fr: e.target.value })}
-                  placeholder="Texte de la question..."
-                  disabled={loading}
-                />
-                </div>
-              <div className="md:col-span-2">
-                <label className="block font-medium mb-1">Énoncé arabe</label>
-                <textarea
-                  className="w-full border rounded-lg p-2"
-                  rows={3}
-                  value={form.enonce_ar}
-                  onChange={(e) => setForm({ ...form, enonce_ar: e.target.value })}
-                  placeholder="Texte de la question..."
-                  disabled={loading}
-                />
-              </div>
-              </div>
-              <div className="md:col-span-2">
-                <label className="block font-medium mb-1">Énoncé anglais</label>
-                <textarea
-                  className="w-full border rounded-lg p-2"
-                  rows={3}
-                  value={form.enonce_en}
-                  onChange={(e) => setForm({ ...form, enonce_en: e.target.value })}
-                  placeholder="Texte de la question..."
-                  disabled={loading}
-                />
-              <div>
                 <label className="block font-medium mb-1">Type de réponse</label>
                 <select
                   className="w-full border rounded-lg p-2"
@@ -319,13 +296,46 @@ export default function GestionQuestions() {
                   <option value="false">Non</option>
                 </select>
               </div>
+              <div className="md:col-span-2">
+                <label className="block font-medium mb-1">Énoncé français</label>
+                <textarea
+                  className="w-full border rounded-lg p-2"
+                  rows={3}
+                  value={form.enonce_fr}
+                  onChange={(e) => setForm({ ...form, enonce_fr: e.target.value })}
+                  placeholder="Texte de la question..."
+                  disabled={loading}
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block font-medium mb-1">Énoncé arabe</label>
+                <textarea
+                  className="w-full border rounded-lg p-2"
+                  rows={3}
+                  value={form.enonce_ar}
+                  onChange={(e) => setForm({ ...form, enonce_ar: e.target.value })}
+                  placeholder="Texte de la question..."
+                  disabled={loading}
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block font-medium mb-1">Énoncé anglais</label>
+                <textarea
+                  className="w-full border rounded-lg p-2"
+                  rows={3}
+                  value={form.enonce_en}
+                  onChange={(e) => setForm({ ...form, enonce_en: e.target.value })}
+                  placeholder="Texte de la question..."
+                  disabled={loading}
+                />
+              </div>
               <div>
                 <label className="block font-medium mb-1">Image (optionnel)</label>
                 <input
                   type="file"
                   accept="image/*"
                   onChange={(e) => setForm({ ...form, image: e.target.files?.[0] || null })}
-                  className="w-full"
+                  className="w-full border rounded-lg p-2"
                   disabled={loading}
                 />
               </div>
@@ -349,14 +359,14 @@ export default function GestionQuestions() {
 
             <div className="flex justify-end gap-3 mt-6">
               <button
-                className="px-4 py-2 rounded border"
+                className="px-4 py-2 rounded border hover:bg-gray-50"
                 onClick={() => setShowModal(false)}
                 disabled={loading}
               >
                 Annuler
               </button>
               <button
-                className="px-4 py-2 rounded bg-green-700 text-white"
+                className="px-4 py-2 rounded bg-green-700 text-white hover:bg-green-800"
                 onClick={handleSave}
                 disabled={loading}
               >
