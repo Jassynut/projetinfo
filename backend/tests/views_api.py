@@ -4,12 +4,14 @@ from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.core.cache import cache
 
 from .models import Test, TestAttempt, Question
 from .serializers_api import (
     TestListSerializer, TestDetailSerializer, TestCreateUpdateSerializer,
     TestAttemptListSerializer, TestAttemptDetailSerializer,
-    TestAttemptStartSerializer, TestAttemptSubmitSerializer
+    TestAttemptStartSerializer, TestAttemptSubmitSerializer,
+    QuestionDetailSerializer
 )
 from hse_app.models import HSEUser
 
@@ -244,4 +246,156 @@ def user_test_attempts(request):
         'attempts_count': attempts.count(),
         'passed_count': attempts.filter(passed=True).count(),
         'attempts': serializer.data
+    })
+
+
+# =============================================================================
+# ALIAS / ENDPOINTS FRONTEND COMPAT (versions/questions publics)
+# =============================================================================
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def list_versions(request):
+    qs = Test.objects.all().order_by('version')
+    serializer = TestListSerializer(qs, many=True)
+    return Response({'versions': serializer.data})
+
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def list_active_versions(request):
+    qs = Test.objects.filter(is_active=True).order_by('version')
+    serializer = TestListSerializer(qs, many=True)
+    return Response({'versions': serializer.data})
+
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def version_questions(request, pk):
+    test = get_object_or_404(Test, pk=pk)
+    questions = test.get_questions_in_order()
+    serializer = QuestionDetailSerializer(questions, many=True)
+    return Response({'questions': serializer.data, 'version': test.version})
+
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def version_add_question(request, pk):
+    test = get_object_or_404(Test, pk=pk)
+    question_id = request.data.get('question_id')
+    if not question_id:
+        return Response({'success': False, 'error': 'question_id requis'}, status=400)
+    try:
+        qid = int(question_id)
+        Question.objects.get(id=qid)
+    except (ValueError, Question.DoesNotExist):
+        return Response({'success': False, 'error': 'Question introuvable'}, status=404)
+
+    ordre = list(test.ordre_questions or [])
+    if qid not in ordre:
+        ordre.append(qid)
+        test.ordre_questions = ordre
+        test.total_questions = len(ordre)
+        test.save()
+    return Response({'success': True, 'ordre_questions': test.ordre_questions})
+
+
+# =============================================================================
+# ENDPOINTS APPRENANT (compat maquette sans authentification)
+# =============================================================================
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def verify_cni(request):
+    cin = request.data.get('cni', '').strip().upper()
+    if not cin:
+        return Response({'success': False, 'error': 'CNI requis'}, status=400)
+    exists = HSEUser.objects.filter(cin=cin).exists()
+    return Response({'success': exists})
+
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def test_questions_public(request, test_id):
+    test = get_object_or_404(Test, id=test_id, is_active=True)
+    questions = test.get_questions_in_order()
+    serializer = QuestionDetailSerializer(questions, many=True)
+    return Response({'questions': serializer.data, 'test_id': test.id, 'version': test.version})
+
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def test_submit_answer(request, test_id):
+    # Stockage léger en cache par session key
+    question_id = request.data.get('question_id')
+    answer = request.data.get('answer')
+    if question_id is None:
+        return Response({'success': False, 'error': 'question_id requis'}, status=400)
+    cache_key = f"test_answers:{request.session.session_key}:{test_id}"
+    answers = cache.get(cache_key, {})
+    answers[str(question_id)] = {'answer': answer}
+    cache.set(cache_key, answers, 60 * 30)
+    return Response({'success': True})
+
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def test_finish_public(request, test_id):
+    test = get_object_or_404(Test, id=test_id)
+    provided_answers = request.data.get('answers') or {}
+    cache_key = f"test_answers:{request.session.session_key}:{test_id}"
+    cached_answers = cache.get(cache_key, {})
+    # merge (answers payload has priority)
+    cached_answers.update(provided_answers)
+
+    mandatory_correct = 0
+    optional_correct = 0
+    mandatory_ids = set(test.mandatory_questions or [])
+
+    for qid_str, data in cached_answers.items():
+        try:
+            qid = int(qid_str)
+            question = Question.objects.get(id=qid)
+        except (ValueError, Question.DoesNotExist):
+            continue
+        user_answer = data.get('answer') if isinstance(data, dict) else data
+        is_correct = question.check_answer(user_answer)
+        if qid in mandatory_ids:
+            if is_correct:
+                mandatory_correct += 1
+        else:
+            if is_correct:
+                optional_correct += 1
+
+    total_score = mandatory_correct + optional_correct
+    overall = total_score  # points = questions
+    cache.set(f"test_result:{request.session.session_key}:{test_id}", {
+        'score': overall,
+        'mandatory_correct': mandatory_correct,
+        'optional_correct': optional_correct,
+        'test_version': test.version
+    }, 60 * 30)
+    cache.delete(cache_key)
+
+    return Response({
+        'success': True,
+        'score': overall,
+        'mandatory_correct': mandatory_correct,
+        'optional_correct': optional_correct,
+        'total_questions': test.total_questions,
+    })
+
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def test_result_public(request, test_id):
+    data = cache.get(f"test_result:{request.session.session_key}:{test_id}")
+    if not data:
+        return Response({'success': False, 'error': 'Résultat indisponible'}, status=404)
+    return Response({
+        'success': True,
+        'score': data.get('score'),
+        'test_version': data.get('test_version'),
+        'attempt_id': None,
+        'certificate_id': None,
     })

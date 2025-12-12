@@ -24,9 +24,15 @@ urlpatterns = [
 
     # TESTS API
     path('api/tests/', include('tests.urls_api')),
+    # Alias compat frontend
+    path('api/versions/', include('tests.urls_api')),
+    path('api/questions/', include('tests.urls_api')),
+    path('api/test/', include('tests.urls_api')),
 
     # CERTIFICATS API
     path('api/certificates/', include('certificats.urls_api')),
+    # Alias FR
+    path('api/certificats/', include('certificats.urls_api')),
 
     # ENDPOINTS DIRECTS (non API)
     path("manager/login/", views.manager_login, name="manager_login"),
