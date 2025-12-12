@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
+import TopNav from "../components/TopNav";
 
 const API_BASE = "http://127.0.0.1:8000";
 
@@ -54,6 +55,7 @@ export default function ResultatTest() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-green-300 p-8 flex items-center justify-center">
       <div className="bg-white rounded-xl shadow-lg border border-green-200 p-8 w-full max-w-3xl text-center">
+        <TopNav className="mb-4" />
         {loading && <p className="text-gray-600">Chargement...</p>}
         {error && <p className="text-red-600 mb-3">{error}</p>}
 

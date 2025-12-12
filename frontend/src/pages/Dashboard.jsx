@@ -1,9 +1,10 @@
 import { useNavigate } from "react-router-dom";
+import TopNav from "../components/TopNav";
 export default function Dashboard() {
   const navigate = useNavigate();
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-green-300 p-8">
-
+      <TopNav className="mb-4" />
       {/* Header */}
       <header className="flex items-center gap-3 mb-12">
         <img src="/ocp-logo.png" alt="Logo OCP" className="w-12" />

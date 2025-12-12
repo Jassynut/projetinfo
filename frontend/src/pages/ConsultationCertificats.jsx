@@ -1,5 +1,6 @@
 import { useState } from "react";
 import axios from "axios";
+import TopNav from "../components/TopNav";
 
 const API_BASE = "http://127.0.0.1:8000";
 const CNI_REGEX = /^[A-Z]{1,2}\d{5,6}$/i;
@@ -50,6 +51,7 @@ export default function ConsultationCertificats() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-green-300 p-8">
+      <TopNav className="mb-4" />
       <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-lg border border-green-200 p-8">
         <div className="flex items-center gap-3 mb-6">
           <img src="/ocp-logo.png" alt="logo" className="w-12" />

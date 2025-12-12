@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import axios from "axios";
+import TopNav from "../components/TopNav";
 
 const API_BASE = "http://127.0.0.1:8000";
 const TEST_DURATION_SECONDS = 600; // 10 minutes
+const CNI_REGEX = /^[A-Z]{1,2}\d{5,6}$/i;
 
 export default function PasserTest() {
   const { id } = useParams(); // test id or version
@@ -17,12 +18,15 @@ export default function PasserTest() {
   const [error, setError] = useState("");
   const [secondsLeft, setSecondsLeft] = useState(TEST_DURATION_SECONDS);
   const [submitting, setSubmitting] = useState(false);
+  const [needsCin, setNeedsCin] = useState(false);
+  const [cinInput, setCinInput] = useState("");
 
   const total = questions.length;
   const currentQuestion = questions[current];
 
-  // Countdown
+  // Countdown démarre uniquement après saisie/validation du CNI
   useEffect(() => {
+    if (needsCin) return;
     const timer = setInterval(() => {
       setSecondsLeft((s) => {
         if (s <= 1) {
@@ -34,16 +38,39 @@ export default function PasserTest() {
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [needsCin]);
 
   // Fetch questions on mount
   useEffect(() => {
     const cniParam = searchParams.get("cni");
-    if (cniParam) {
-      sessionStorage.setItem("cni", cniParam.toUpperCase());
+    const stored = cniParam || sessionStorage.getItem("cni");
+    if (stored && CNI_REGEX.test(stored)) {
+      sessionStorage.setItem("cni", stored.toUpperCase());
+      setSecondsLeft(TEST_DURATION_SECONDS);
+      fetchQuestions();
+      setNeedsCin(false);
+    } else {
+      setNeedsCin(true);
     }
-    fetchQuestions();
   }, [id, searchParams]);
+
+  const handleCinSubmit = async () => {
+    const value = cinInput.trim().toUpperCase();
+    if (!CNI_REGEX.test(value)) {
+      setError("Format CNI invalide (ex: AE112456)");
+      return;
+    }
+    setError("");
+    try {
+      await axios.post(`${API_BASE}/api/test/verifier-cni`, { cni: value });
+    } catch (err) {
+      // on autorise quand même le passage si l'API n'est pas dispo
+    }
+    sessionStorage.setItem("cni", value);
+    setNeedsCin(false);
+    setSecondsLeft(TEST_DURATION_SECONDS);
+    fetchQuestions();
+  };
 
   const fetchQuestions = async () => {
     setLoading(true);
@@ -119,6 +146,7 @@ export default function PasserTest() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-green-300 p-4 md:p-8">
       <div className="max-w-5xl mx-auto bg-white rounded-xl shadow-lg border border-green-200 p-6">
+        <TopNav className="mb-4" />
         <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
           <div>
             <h1 className="text-xl font-bold text-green-900">Test HSE</h1>
@@ -140,6 +168,25 @@ export default function PasserTest() {
         </header>
 
         {error && <p className="text-red-600 mb-4">{error}</p>}
+        {needsCin && (
+          <div className="space-y-3 mb-6">
+            <p className="text-sm text-gray-700">
+              Merci de saisir votre CNI pour démarrer le test.
+            </p>
+            <input
+              className="w-full border rounded-lg p-3"
+              placeholder="AE112456"
+              value={cinInput}
+              onChange={(e) => setCinInput(e.target.value)}
+            />
+            <button
+              className="w-full bg-green-700 text-white py-3 rounded-lg shadow hover:bg-green-800"
+              onClick={handleCinSubmit}
+            >
+              Continuer
+            </button>
+          </div>
+        )}
         {loading && <p className="text-gray-600">Chargement des questions...</p>}
 
         {!loading && currentQuestion && (

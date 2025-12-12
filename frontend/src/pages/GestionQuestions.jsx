@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
+import TopNav from "../components/TopNav";
 
 const API_BASE = "http://127.0.0.1:8000";
 
@@ -139,6 +140,7 @@ export default function GestionQuestions() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-green-300 p-8">
+      <TopNav className="mb-4" />
       <div className="flex items-center justify-between mb-10">
         <div className="flex items-center gap-3">
           <img src="/ocp-logo.png" alt="logo" className="w-12" />

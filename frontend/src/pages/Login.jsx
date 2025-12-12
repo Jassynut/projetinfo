@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import TopNav from "../components/TopNav";
 
 export default function Login() {
 
@@ -28,6 +29,7 @@ export default function Login() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-green-300">
       <div className="text-center w-full max-w-md px-6">
+        <TopNav className="mb-4" />
 
         {/* Logo */}
         <img

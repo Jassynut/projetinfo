@@ -1,5 +1,6 @@
 import { useState } from "react";
 import axios from "axios";
+import TopNav from "../components/TopNav";
 
 export default function Database() {
   const [selectedFile, setSelectedFile] = useState(null);
@@ -45,6 +46,7 @@ export default function Database() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-green-300 p-10">
+      <TopNav className="mb-4" />
 
       {/* Header */}
       <div className="flex justify-between items-center mb-10">

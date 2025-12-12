@@ -1,11 +1,12 @@
 import { useNavigate } from "react-router-dom";
+import TopNav from "../components/TopNav";
 
 export default function GestionQuestionnaires() {
   const navigate = useNavigate();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-green-300 p-10">
-
+      <TopNav className="mb-4" />
       {/* Header */}
       <div className="flex justify-between items-center mb-12">
         <div className="flex items-center gap-3">
