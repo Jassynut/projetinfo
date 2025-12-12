@@ -7,7 +7,8 @@ const CNI_REGEX = /^[A-Z]{1,2}\d{5,6}$/i;
 
 export default function ConsultationCertificats() {
   const [cni, setCni] = useState("");
-  const [results, setResults] = useState([]);
+  const [userInfo, setUserInfo] = useState(null);
+  const [certificats, setCertificats] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -19,28 +20,51 @@ export default function ConsultationCertificats() {
     }
     setError("");
     setLoading(true);
-    setResults([]);
+    setUserInfo(null);
+    setCertificats([]);
+    
     try {
-      const res = await axios.post(`${API_BASE}/api/certificats/recherche`, {
+      const res = await axios.post(`${API_BASE}/api/certificats/recherche/`, {
         cni: value,
       });
-      setResults(res.data?.certificats || res.data?.certificates || []);
+      
+      if (res.data.success) {
+        setUserInfo(res.data.user_info);
+        setCertificats(res.data.certificats || []);
+        
+        if (res.data.certificats.length === 0) {
+          setError("Aucun certificat trouvé pour cet apprenant.");
+        }
+      } else {
+        setError(res.data.error || "Erreur de recherche");
+      }
     } catch (err) {
-      setError("Aucun certificat trouvé ou erreur de recherche.");
+      if (err.response?.status === 404) {
+        setError("Aucun apprenant trouvé avec ce CNI.");
+      } else {
+        setError("Erreur lors de la recherche. Vérifiez votre connexion.");
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDownload = async (id) => {
+  const handleDownload = async (attemptId) => {
     try {
-      const res = await axios.get(`${API_BASE}/api/certificats/${id}/pdf`, {
-        responseType: "blob",
-      });
-      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const response = await axios.get(
+        `${API_BASE}/api/certificats/${attemptId}/pdf/`,
+        {
+          responseType: "blob",
+        }
+      );
+      
+      const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement("a");
       link.href = url;
-      link.setAttribute("download", `certificat-${id}.pdf`);
+      link.setAttribute(
+        "download",
+        `certificat-hse-${attemptId}.pdf`
+      );
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -69,55 +93,83 @@ export default function ConsultationCertificats() {
             placeholder="Entrez le code CNI (ex: AE112456)"
             value={cni}
             onChange={(e) => setCni(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
           />
           <button
             className="bg-green-700 text-white px-6 py-3 rounded-lg shadow hover:bg-green-800"
             onClick={handleSearch}
             disabled={loading}
           >
-            Rechercher
+            {loading ? "Recherche..." : "Rechercher"}
           </button>
         </div>
-        {error && <p className="text-red-600 mb-2">{error}</p>}
+        
+        {error && (
+          <div className={`mb-4 p-3 rounded-lg ${error.includes("Aucun") ? "bg-yellow-50 text-yellow-800" : "bg-red-50 text-red-800"}`}>
+            {error}
+          </div>
+        )}
 
+        {/* Informations de l'apprenant */}
+        {userInfo && (
+          <div className="mb-6 p-4 bg-green-50 rounded-lg border border-green-200">
+            <h2 className="text-lg font-semibold text-green-800 mb-2">Informations de l'apprenant</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <p><span className="font-medium">Nom complet:</span> {userInfo.full_name}</p>
+              <p><span className="font-medium">CNI:</span> {maskCni(userInfo.cin)}</p>
+              <p><span className="font-medium">Entreprise:</span> {userInfo.entreprise}</p>
+              <p><span className="font-medium">Entité:</span> {userInfo.entite}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Liste des certificats */}
         <div className="mt-6">
-          {loading && <p className="text-gray-600">Recherche en cours...</p>}
-          {!loading && results.length === 0 && (
-            <p className="text-gray-600">Aucun résultat pour le moment.</p>
+          {loading && (
+            <div className="text-center py-4">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-green-700"></div>
+              <p className="mt-2 text-gray-600">Recherche en cours...</p>
+            </div>
           )}
-          {results.length > 0 && (
-            <div className="space-y-4">
-              {results.map((item) => (
-                <div
-                  key={item.id}
-                  className="border rounded-lg p-4 flex flex-col md:flex-row md:items-center md:justify-between"
-                >
-                  <div>
-                    <p className="font-semibold text-green-800">
-                      {item.user_full_name || item.nom || "Apprenant"}
-                    </p>
-                    <p className="text-sm text-gray-600">
-                      CNI : {item.user_cin ? maskCni(item.user_cin) : "—"}
-                    </p>
-                    <p className="text-sm text-gray-600">
-                      Test version : {item.test_version || item.version || "—"} — Score :{" "}
-                      {item.score ?? item.note ?? "—"}/21
-                    </p>
-                    <p className="text-sm text-gray-600">
-                      Date :{" "}
-                      {item.issued_date
-                        ? new Date(item.issued_date).toLocaleDateString()
-                        : "—"}
-                    </p>
-                  </div>
-                  <button
-                    className="mt-3 md:mt-0 bg-blue-600 text-white px-4 py-2 rounded-lg shadow hover:bg-blue-700"
-                    onClick={() => handleDownload(item.id)}
+          
+          {!loading && certificats.length > 0 && (
+            <div>
+              <h3 className="text-lg font-semibold text-green-800 mb-4">
+                Certificats disponibles ({certificats.length})
+              </h3>
+              <div className="space-y-4">
+                {certificats.map((cert) => (
+                  <div
+                    key={cert.id}
+                    className="border rounded-lg p-4 bg-white hover:bg-green-50 transition-colors"
                   >
-                    Télécharger le certificat
-                  </button>
-                </div>
-              ))}
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between">
+                      <div className="mb-3 md:mb-0">
+                        <div className="flex items-center gap-3 mb-2">
+                          <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                          <p className="font-semibold text-green-800">
+                            Test HSE - Version {cert.test_version}
+                          </p>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm text-gray-600">
+                          <p>Date: {new Date(cert.date_test).toLocaleDateString('fr-FR')}</p>
+                          <p>Score: {cert.score_sur_21}/21 ({Math.round(cert.score)}%)</p>
+                          <p>Durée: {cert.time_taken_minutes} min</p>
+                        </div>
+                      </div>
+                      <button
+                        className="bg-green-700 hover:bg-green-800 text-white px-4 py-2 rounded-lg shadow transition-colors flex items-center gap-2"
+                        onClick={() => handleDownload(cert.id)}
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        Télécharger
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -127,7 +179,6 @@ export default function ConsultationCertificats() {
 }
 
 function maskCni(value = "") {
-  if (value.length <= 2) return "*".repeat(value.length);
-  return value.slice(0, 2) + "*".repeat(Math.max(0, value.length - 3)) + value.slice(-1);
+  if (!value || value.length <= 2) return "***";
+  return value.slice(0, 2) + "*".repeat(value.length - 3) + value.slice(-1);
 }
-
