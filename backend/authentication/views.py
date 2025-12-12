@@ -463,3 +463,49 @@ class UploadApprenantsView(APIView):
             return Response(result, status=status.HTTP_400_BAD_REQUEST)
 
         return Response(result, status=status.HTTP_201_CREATED)
+
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+import pandas as pd
+
+@csrf_exempt
+def upload_excel(request):
+    if request.method == "POST":
+        excel_file = request.FILES.get("file")
+
+        if not excel_file:
+            return JsonResponse({"success": False, "error": "Aucun fichier reçu"})
+
+        try:
+            # Lire sans header
+            df_raw = pd.read_excel(excel_file, header=None)
+
+            # Trouver la ligne contenant "Entité" (l'en-tête réelle)
+            header_row = None
+            for i, row in df_raw.iterrows():
+                if row.astype(str).str.contains("Entité").any():
+                    header_row = i
+                    break
+
+            if header_row is None:
+                return JsonResponse({"success": False, "error": "Impossible de trouver l'en-tête dans ce fichier."})
+
+            # Recharger le fichier en utilisant la ligne trouvée comme header
+            df = pd.read_excel(excel_file, header=header_row)
+
+            # Supprimer colonnes 'Unnamed'
+            df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
+
+            # Supprimer lignes vides
+            df = df.dropna(how="all")
+
+            # Reset index
+            df = df.reset_index(drop=True)
+
+            return JsonResponse({"success": True, "data": df.to_dict(orient="records")})
+
+        except Exception as e:
+            print("🔥 ERREUR DJANGO :", e)
+            return JsonResponse({"success": False, "error": str(e)})
+
+    return JsonResponse({"success": False, "error": "Méthode non autorisée"})

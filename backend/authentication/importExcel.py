@@ -1,6 +1,6 @@
 import pandas as pd
 from django.db import transaction
-from authentication.models import TestUser  
+from authentication.models import TestUser    
 
 def importexcel(excel_file):
     """
@@ -50,7 +50,7 @@ def importexcel(excel_file):
                             updated_count += 1
                     else:
                         # Création d'un nouvel apprenant (user_type='user')
-                        TestUser.objects.create_hse_user(cin=cin, name=name)
+                        TestUser.objects.create_hse_user(cin=cin, name=full_name)
                         created_count += 1
 
                 except Exception as e:

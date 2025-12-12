@@ -151,12 +151,16 @@ export default function PasserTest() {
           <div>
             <h1 className="text-xl font-bold text-green-900">Test HSE</h1>
             <p className="text-sm text-gray-600">
-              Temps restant : <span className="font-semibold text-green-700">{formatTime(secondsLeft)}</span>
+              Temps restant :{" "}
+              <span className="font-semibold text-green-700">
+                {formatTime(secondsLeft)}
+              </span>
             </p>
           </div>
           <div className="w-full md:w-1/2">
             <div className="text-sm text-gray-600 mb-1">
-              Progression : {Math.min(progress, 100)}% ({Object.keys(answers).length}/{total})
+              Progression : {Math.min(progress, 100)}% (
+              {Object.keys(answers).length}/{total})
             </div>
             <div className="w-full h-3 bg-gray-200 rounded-full">
               <div
@@ -202,7 +206,15 @@ export default function PasserTest() {
                   className="w-full max-h-64 object-contain rounded mb-4"
                 />
               )}
-              <p className="text-lg font-semibold text-green-900">{currentQuestion.enonce_fr || currentQuestion.enonce}</p>
+              <p className="text-lg font-semibold text-green-900">
+                {currentQuestion.enonce_fr || currentQuestion.get_enonce("fr")}
+              </p>
+              <p className="text-lg font-semibold text-green-900 mt-2">
+                {currentQuestion.enonce_ar || currentQuestion.get_enonce("ar")}
+              </p>
+              <p className="text-lg font-semibold text-green-900 mt-2">
+                {currentQuestion.enonce_en || currentQuestion.get_enonce("en")}
+              </p>
             </div>
 
             <div className="flex gap-3">
@@ -263,4 +275,3 @@ export default function PasserTest() {
     </div>
   );
 }
-

@@ -25,7 +25,7 @@ export default function Database() {
 
     try {
       const res = await axios.post(
-        "http://127.0.0.1:8000/stats/upload_excel/",
+        "http://127.0.0.1:8000/authentication/upload_excel/",
         formData,
         { headers: { "Content-Type": "multipart/form-data" } }
       );

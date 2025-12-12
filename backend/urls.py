@@ -3,10 +3,15 @@ from django.urls import path, include
 from django.http import HttpResponseRedirect
 from authentication import views
 from tests.views_api import list_versions, list_active_versions, version_detail
+from rest_framework.routers import DefaultRouter
+from tests.views_api import QuestionViewSet
 
 # Fonction pour rediriger vers le front-end React
 def redirect_to_front(request):
     return HttpResponseRedirect("http://localhost:5173/")   # 👉 Page Login React
+
+questions_router = DefaultRouter(trailing_slash=False)
+questions_router.register(r'questions', QuestionViewSet, basename='question')
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -28,12 +33,8 @@ urlpatterns = [
     path('api/versions/actives', list_active_versions, name='api-versions-actives'),
     path('api/versions/<int:pk>', version_detail, name='api-versions-detail'),
 
-    # TESTS API
-    path('api/tests/', include('tests.urls_api')),
-    # Alias compat frontend
-    path('api/versions/', include('tests.urls_api')),
-    path('api/questions/', include('tests.urls_api')),
-    path('api/test/', include('tests.urls_api')),
+    # QUESTIONS API direct
+    path('api/', include(questions_router.urls)),
 
     # CERTIFICATS API
     path('api/certificates/', include('certificats.urls_api')),
@@ -44,4 +45,5 @@ urlpatterns = [
     path("manager/login/", views.manager_login, name="manager_login"),
     path("user/current/", views.get_current_user, name="get_current_user"),
     path("logout/", views.logout_user, name="logout_user"),
+     path('api/', include('tests.urls_api')),
 ]

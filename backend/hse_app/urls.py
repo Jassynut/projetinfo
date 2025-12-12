@@ -27,4 +27,5 @@ urlpatterns = [
     
     # Sync
     path('sync-users/', views.sync_test_users_with_hse, name='sync_users'),
+    path('upload_excel/', views.upload_excel, name='upload_excel'),
 ]
