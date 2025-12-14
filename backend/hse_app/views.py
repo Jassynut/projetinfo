@@ -14,11 +14,11 @@ from authentication.models import TestUser
 # ==================== API HSE USERS (Participants) ====================
 
 @csrf_exempt
-@login_required
 def search_hse_user_by_cin(request):
     """
     Rechercher un utilisateur HSE par CIN
     GET: /api/hse/users/search/?cin=AB123456
+    Note: Pas de @login_required car utilisé pour vérifier le CIN avant authentification
     """
     cin = request.GET.get('cin', '').strip().upper()
     
@@ -31,20 +31,22 @@ def search_hse_user_by_cin(request):
     try:
         user = HSEUser.objects.get(cin=cin)
         
-        # Récupérer les tentatives de test
-        attempts = TestAttempt.objects.filter(user__cin=cin).order_by('-started_at')
+        # Récupérer les tentatives de test (optionnel, seulement si authentifié)
         attempts_data = []
-        
-        for attempt in attempts[:5]:  # 5 dernières tentatives
-            attempts_data.append({
-                'test_version': attempt.test.version,
-                'started_at': attempt.started_at.isoformat() if attempt.started_at else None,
-                'status': attempt.status,
-                'passed': attempt.passed,
-                'total_score': attempt.overall_score_percentage,
-                'mandatory_score': attempt.mandatory_score_percentage,
-                'langue': attempt.get_langue_display()
-            })
+        attempts_count = 0
+        if request.user.is_authenticated:
+            attempts = TestAttempt.objects.filter(user__cin=cin).order_by('-started_at')
+            attempts_count = attempts.count()
+            for attempt in attempts[:5]:  # 5 dernières tentatives
+                attempts_data.append({
+                    'test_version': attempt.test.version,
+                    'started_at': attempt.started_at.isoformat() if attempt.started_at else None,
+                    'status': attempt.status,
+                    'passed': attempt.passed,
+                    'total_score': attempt.overall_score_percentage,
+                    'mandatory_score': attempt.mandatory_score_percentage,
+                    'langue': attempt.get_langue_display()
+                })
         
         user_data = {
             'id': user.id,
@@ -52,16 +54,14 @@ def search_hse_user_by_cin(request):
             'prenom': user.prénom,
             'full_name': user.get_full_name(),
             'cin': user.cin,
-            'email': user.email,
             'entite': user.entite,
             'entreprise': user.entreprise,
             'chef_projet_ocp': user.chef_projet_ocp,
             'presence': user.presence,
-            'reussite': user.reussite,
-            'score': user.score,
+            'sensibilise_avec_succes': user.sensibilise_avec_succes,
             'taux_reussite': user.taux_reussite,
             'recent_attempts': attempts_data,
-            'attempts_count': attempts.count()
+            'attempts_count': attempts_count
         }
         
         return JsonResponse({
@@ -107,13 +107,10 @@ def create_hse_user(request):
                 nom=data['nom'],
                 prénom=data.get('prenom', data.get('prénom', '')),
                 cin=cin,
-                email=data.get('email', ''),
                 entite=data.get('entite', ''),
                 entreprise=data.get('entreprise', ''),
                 chef_projet_ocp=data.get('chef_projet_ocp', ''),
-                presence=data.get('presence', False),
-                reussite=data.get('reussite', False),
-                score=data.get('score', 0)
+                presence=data.get('presence', False)
             )
             
             return JsonResponse({
@@ -145,23 +142,20 @@ def create_hse_user(request):
     }, status=405)
 
 
-@login_required
+@csrf_exempt
 def list_hse_users(request):
     """
     Lister les utilisateurs HSE avec pagination et filtres
-    GET: /api/hse/users/?search=...&entreprise=...&page=1
+    GET: /api/hse/users/?search=...&entreprise=...&page=1&date_ajout=2025-12-13
     """
-    if not request.user.is_staff:
-        return JsonResponse({
-            'success': False,
-            'error': 'Accès non autorisé'
-        }, status=403)
+    # Permettre l'accès sans authentification pour l'affichage
     
     # Filtres
     search = request.GET.get('search', '')
     entreprise = request.GET.get('entreprise', '')
     entite = request.GET.get('entite', '')
-    reussite = request.GET.get('reussite')
+    presence = request.GET.get('presence')
+    date_ajout = request.GET.get('date_ajout', '')
     
     # Pagination
     page = int(request.GET.get('page', 1))
@@ -184,8 +178,23 @@ def list_hse_users(request):
     if entite:
         users = users.filter(entite__icontains=entite)
     
-    if reussite is not None:
-        users = users.filter(reussite=(reussite.lower() == 'true'))
+    if presence is not None:
+        users = users.filter(presence=(presence.lower() == 'true'))
+    
+    # Filtrer par date d'ajout
+    if date_ajout:
+        try:
+            from datetime import datetime
+            date_obj = datetime.strptime(date_ajout, '%Y-%m-%d').date()
+            users = users.filter(date_ajout=date_obj)
+            # Debug: compter les résultats
+            count = users.count()
+        except ValueError as e:
+            # Si la date est invalide, on ignore le filtre
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Erreur parsing date: {e}")
+            pass
     
     # Pagination
     paginator = Paginator(users.order_by('nom', 'prénom'), page_size)
@@ -193,35 +202,68 @@ def list_hse_users(request):
     
     users_data = []
     for user in page_obj:
-        users_data.append({
-            'id': user.id,
-            'cin': user.cin,
-            'nom': user.nom,
-            'prenom': user.prénom,
-            'full_name': user.get_full_name(),
-            'email': user.email,
-            'entreprise': user.entreprise,
-            'entite': user.entite,
-            'chef_projet_ocp': user.chef_projet_ocp,
-            'presence': user.presence,
-            'reussite': user.reussite,
-            'score': user.score,
-            'taux_reussite': user.taux_reussite,
-            'test_attempts': TestAttempt.objects.filter(user__cin=user.cin).count()
-        })
+        try:
+            # Calculer taux_reussite de manière sécurisée
+            taux_reussite = 0
+            try:
+                taux_reussite = user.taux_reussite
+            except Exception as e:
+                # Si erreur lors du calcul du taux_reussite, mettre à 0
+                taux_reussite = 0
+            
+            # Récupérer date_ajout de manière sécurisée
+            date_ajout_str = None
+            try:
+                if hasattr(user, 'date_ajout') and user.date_ajout:
+                    date_ajout_str = user.date_ajout.isoformat()
+            except Exception:
+                pass
+            
+            users_data.append({
+                'id': user.id,
+                'cin': user.cin,
+                'nom': user.nom,
+                'prenom': user.prénom,
+                'full_name': user.get_full_name(),
+                'entreprise': user.entreprise,
+                'entite': user.entite,
+                'chef_projet_ocp': user.chef_projet_ocp or '',
+                'presence': user.presence,
+                'sensibilise_avec_succes': user.sensibilise_avec_succes,
+                'taux_reussite': taux_reussite,
+                'test_attempts': TestAttempt.objects.filter(user__cin=user.cin).count(),
+                'date_ajout': date_ajout_str
+            })
+        except Exception as e:
+            # Logger l'erreur mais continuer avec les autres utilisateurs
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Erreur lors de la sérialisation de l'utilisateur {user.id}: {str(e)}")
+            continue
     
-    return JsonResponse({
-        'success': True,
-        'users': users_data,
-        'pagination': {
-            'page': page,
-            'page_size': page_size,
-            'total_count': paginator.count,
-            'total_pages': paginator.num_pages,
-            'has_next': page_obj.has_next(),
-            'has_previous': page_obj.has_previous()
-        }
-    })
+    try:
+        return JsonResponse({
+            'success': True,
+            'users': users_data,
+            'pagination': {
+                'page': page,
+                'page_size': page_size,
+                'total_count': paginator.count,
+                'total_pages': paginator.num_pages,
+                'has_next': page_obj.has_next(),
+                'has_previous': page_obj.has_previous()
+            }
+        })
+    except Exception as e:
+        import logging
+        import traceback
+        logger = logging.getLogger(__name__)
+        logger.error(f"Erreur dans list_hse_users: {str(e)}\n{traceback.format_exc()}")
+        return JsonResponse({
+            'success': False,
+            'error': f'Erreur serveur: {str(e)}',
+            'users': []
+        }, status=500)
 
 
 # ==================== API HSE TESTS ====================
@@ -302,59 +344,99 @@ def submit_hse_test_answers(request, attempt_id):
         
         # Calculer les scores
         test = attempt.test
-        mandatory_ids = set(test.mandatory_questions)
+        # Utiliser mandatory_questions du test si disponible, sinon utiliser is_mandatory des questions
+        mandatory_ids = set(test.mandatory_questions) if test.mandatory_questions else set()
         
         mandatory_correct = 0
         optional_correct = 0
         
         for question_id_str, user_answer in user_answers.items():
-            question_id = int(question_id_str)
-            question = Question.objects.get(id=question_id)
-                
-                # Vérifier la réponse (user_answer est déjà True/False)
+            try:
+                question_id = int(question_id_str)
+                question = Question.objects.get(id=question_id)
+            except (ValueError, Question.DoesNotExist):
+                continue
+            
+            # Normaliser la réponse en booléen si nécessaire
+            # Gérer les cas où la réponse arrive comme chaîne "true"/"false" ou entier 1/0
+            if isinstance(user_answer, dict):
+                user_answer = user_answer.get('answer')
+            
+            if isinstance(user_answer, str):
+                user_answer = user_answer.lower().strip()
+                if user_answer in ['true', 'vrai', '1', 'yes', 'oui', 't']:
+                    user_answer = True
+                elif user_answer in ['false', 'faux', '0', 'no', 'non', 'f']:
+                    user_answer = False
+                else:
+                    continue  # Réponse invalide, passer à la suivante
+            elif isinstance(user_answer, int):
+                user_answer = bool(user_answer)
+            elif user_answer is None:
+                continue  # Pas de réponse, passer à la suivante
+            
+            # Vérifier la réponse en utilisant la fonction check_answer du modèle
             is_correct = question.check_answer(user_answer)
+            
+            # Déterminer si la question est obligatoire :
+            # 1. Si elle est dans mandatory_questions du test
+            # 2. Sinon, si is_mandatory de la question est True
+            is_mandatory_question = question_id in mandatory_ids or question.is_mandatory
                 
-            if question_id in mandatory_ids:
+            if is_mandatory_question:
                 if is_correct:
                     mandatory_correct += 1
             else:
                 if is_correct:
                     optional_correct += 1
                                     
+        # Calculer le total des questions obligatoires
+        total_mandatory = len(mandatory_ids) if mandatory_ids else 0
+        if total_mandatory == 0:
+            # Si aucune question n'est marquée comme obligatoire dans le test,
+            # compter celles avec is_mandatory=True
+            for question_id_str in user_answers.keys():
+                try:
+                    question_id = int(question_id_str)
+                    question = Question.objects.get(id=question_id)
+                    if question.is_mandatory:
+                        total_mandatory += 1
+                except (Question.DoesNotExist, ValueError):
+                    continue
+        
         # Mettre à jour les scores
         attempt.mandatory_correct = mandatory_correct
-        attempt.mandatory_wrong = len(mandatory_ids) - mandatory_correct
-        attempt.mandatory_total = len(mandatory_ids)
+        attempt.mandatory_wrong = total_mandatory - mandatory_correct
+        attempt.mandatory_total = total_mandatory
         attempt.optional_correct = optional_correct
-        attempt.optional_wrong = test.total_questions - len(mandatory_ids) - optional_correct
-        attempt.optional_total = test.total_questions - len(mandatory_ids)
-        attempt.mandatory_score_percentage = round((mandatory_correct / len(mandatory_ids) * 100), 2) if len(mandatory_ids) > 0 else 0
+        attempt.optional_wrong = test.total_questions - total_mandatory - optional_correct
+        attempt.optional_total = test.total_questions - total_mandatory
+        attempt.mandatory_score_percentage = round((mandatory_correct / total_mandatory * 100), 2) if total_mandatory > 0 else 0
         attempt.optional_score_percentage = round((optional_correct / attempt.optional_total * 100), 2) if attempt.optional_total > 0 else 0
         attempt.overall_score_percentage = round(((mandatory_correct + optional_correct) / test.total_questions * 100), 2) if test.total_questions > 0 else 0
-        attempt.passed = mandatory_correct == len(mandatory_ids)
+        attempt.passed = mandatory_correct == total_mandatory if total_mandatory > 0 else False
         attempt.status = 'passed' if attempt.passed else 'failed'
         
         attempt.save()
         
-        # Mettre à jour les statistiques de l'utilisateur HSE
-        try:
-            hse_user = HSEUser.objects.get(cin=request.user.cin)
-            hse_user.score = attempt.overall_score_percentage
-            hse_user.reussite = attempt.passed
-            hse_user.save()
-        except HSEUser.DoesNotExist:
-            # Créer un utilisateur HSE si non existant
-            HSEUser.objects.create(
-                nom=request.user.last_name or '',
-                prénom=request.user.first_name or request.user.username,
-                cin=request.user.cin,
-                email=request.user.email or '',
-                entite='',
-                entreprise='',
-                score=attempt.overall_score_percentage,
-                reussite=attempt.passed,
-                presence=True
-            )
+        # Mettre à jour sensibilise_avec_succes si le test est réussi
+        if attempt.passed:
+            try:
+                # Trouver l'utilisateur HSE correspondant via le CIN
+                hse_user = HSEUser.objects.get(cin=attempt.user.cin)
+                hse_user.sensibilise_avec_succes = True
+                hse_user.save(update_fields=['sensibilise_avec_succes'])
+            except HSEUser.DoesNotExist:
+                # L'utilisateur HSE n'existe pas encore, ce n'est pas grave
+                pass
+            except Exception as e:
+                # Logger l'erreur mais ne pas bloquer la soumission du test
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Erreur lors de la mise à jour de sensibilise_avec_succes: {str(e)}")
+        
+        # Note: Le champ 'presence' n'est pas mis à jour automatiquement
+        # Il doit être géré manuellement par un manager
             
         return JsonResponse({
             'success': True,
@@ -551,7 +633,6 @@ def get_hse_statistics(request):
     # Statistiques utilisateurs
     total_users = HSEUser.objects.count()
     users_present = HSEUser.objects.filter(presence=True).count()
-    users_reussite = HSEUser.objects.filter(reussite=True).count()
     
     # Statistiques tests
     total_attempts = TestAttempt.objects.count()
@@ -614,9 +695,9 @@ def get_hse_statistics(request):
             'users': {
                 'total': total_users,
                 'present': users_present,
-                'successful': users_reussite,
-                'presence_rate': round((users_present / total_users * 100), 2) if total_users > 0 else 0,
-                'success_rate': round((users_reussite / total_users * 100), 2) if total_users > 0 else 0
+                'present_percentage': round((users_present / total_users * 100), 2) if total_users > 0 else 0,
+                'absent': total_users - users_present,
+                'absent_percentage': round(((total_users - users_present) / total_users * 100), 2) if total_users > 0 else 0
             },
             'attempts': {
                 'total': total_attempts,
@@ -738,7 +819,6 @@ def sync_test_users_with_hse(request):
                     defaults={
                         'nom': test_user.last_name or '',
                         'prénom': test_user.first_name or test_user.username,
-                        'email': test_user.email or '',
                         'entite': 'Non spécifié',
                         'entreprise': 'Non spécifié'
                     }
@@ -750,8 +830,6 @@ def sync_test_users_with_hse(request):
                         hse_user.prénom = test_user.first_name
                     if test_user.last_name and not hse_user.nom:
                         hse_user.nom = test_user.last_name
-                    if test_user.email and not hse_user.email:
-                        hse_user.email = test_user.email
                     hse_user.save()
                     synced += 1
                 else:
@@ -781,10 +859,104 @@ def sync_test_users_with_hse(request):
         }, status=500)
 
 
+# ==================== API IMPORT EXCEL ====================
+
+@csrf_exempt
+# @login_required  # Temporairement désactivé
+def preview_hse_users_excel(request):
+    """
+    Prévisualiser les données d'un fichier Excel sans les importer
+    POST: /api/users/import/preview/
+    Content-Type: multipart/form-data
+    file: fichier Excel (.xlsx, .xls)
+    
+    NOTE: Cette fonction utilise la fonction unifiée upload_excel de views_api
+    """
+    # Utiliser directement la fonction unifiée
+    from .views_api import upload_excel
+    from rest_framework.request import Request
+    from rest_framework.response import Response as DRFResponse
+    
+    # Convertir la requête Django en requête DRF
+    drf_request = Request(request)
+    drf_response = upload_excel(drf_request)
+    
+    # Convertir la réponse DRF en JsonResponse Django
+    if hasattr(drf_response, 'data'):
+        return JsonResponse(drf_response.data, status=drf_response.status_code)
+    return JsonResponse({'success': False, 'error': 'Erreur de conversion'}, status=500)
+
+
+@csrf_exempt
+# @login_required  # Temporairement désactivé pour permettre l'import sans auth
+def import_hse_users(request):
+    """
+    Importer des utilisateurs HSE depuis un fichier Excel
+    POST: /api/users/import/
+    Content-Type: multipart/form-data
+    file: fichier Excel (.xlsx, .xls)
+    """
+    # Temporairement désactivé pour permettre l'import sans auth
+    # if not request.user.is_staff:
+    #     return JsonResponse({
+    #         'success': False,
+    #         'error': 'Accès non autorisé'
+    #     }, status=403)
+    
+    if request.method != 'POST':
+        return JsonResponse({
+            'success': False,
+            'error': 'Méthode non autorisée'
+        }, status=405)
+    
+    if 'file' not in request.FILES:
+        return JsonResponse({
+            'success': False,
+            'error': 'Aucun fichier fourni'
+        }, status=400)
+    
+    excel_file = request.FILES['file']
+    
+    # Vérifier l'extension
+    if not excel_file.name.endswith(('.xlsx', '.xls')):
+        return JsonResponse({
+            'success': False,
+            'error': 'Le fichier doit être au format Excel (.xlsx ou .xls)'
+        }, status=400)
+    
+    try:
+        from .import_excel import import_hse_users_excel
+        result = import_hse_users_excel(excel_file)
+        
+        if result['status'] == 'error':
+            return JsonResponse({
+                'success': False,
+                'error': result.get('message', 'Erreur lors de l\'import')
+            }, status=400)
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Import réussi : {result["created"]} créés, {result["updated"]} mis à jour',
+            'summary': {
+                'created': result['created'],
+                'updated': result['updated'],
+                'total_processed': result.get('total_processed', 0),
+                'errors_count': len(result.get('errors', []))
+            },
+            'errors': result.get('errors', []),
+            'data': result.get('data', [])  # Retourner les données du fichier Excel
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': f'Erreur lors de l\'import : {str(e)}'
+        }, status=500)
+
+
 # ==================== API MODIFICATION DE PRÉSENCE ====================
 
 @csrf_exempt
-@login_required
 def update_user_presence(request, user_id):
     """
     Modifier la présence d'un utilisateur HSE
@@ -793,38 +965,260 @@ def update_user_presence(request, user_id):
         "presence": true
     }
     """
-    if not request.user.is_staff:
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    # Log de la requête entrante
+    logger.info(f"update_user_presence appelé - Method: {request.method}, User ID: {user_id}, Body: {request.body}")
+    print(f"[DEBUG] update_user_presence - Method: {request.method}, User ID: {user_id}")
+    
+    # Accepter PATCH, POST et PUT pour compatibilité
+    if request.method not in ['PATCH', 'POST', 'PUT']:
+        logger.warning(f"Méthode non autorisée: {request.method}")
         return JsonResponse({
             'success': False,
-            'error': 'Accès non autorisé'
-        }, status=403)
+            'error': f'Méthode non autorisée: {request.method}. Utilisez PATCH, POST ou PUT.'
+        }, status=405)
+    
+    # Pour POST et PUT, traiter comme PATCH
+    if request.method in ['POST', 'PUT']:
+        logger.info(f"Méthode {request.method} acceptée, traitement comme PATCH")
     
     try:
         user = HSEUser.objects.get(id=user_id)
+        logger.info(f"Utilisateur trouvé: {user.cin}, présence actuelle: {user.presence}")
+        print(f"[DEBUG] Utilisateur trouvé: {user.cin}, présence actuelle: {user.presence}")
         
-        if request.method == 'PATCH':
+        try:
             data = json.loads(request.body)
-            user.presence = data.get('presence', user.presence)
-            user.save()
+            logger.info(f"Données parsées: {data}")
+            print(f"[DEBUG] Données parsées: {data}")
+        except json.JSONDecodeError as e:
+            logger.error(f"Erreur parsing JSON: {str(e)}, Body: {request.body}")
+            return JsonResponse({
+                'success': False,
+                'error': f'Format JSON invalide: {str(e)}'
+            }, status=400)
+        
+        if 'presence' in data:
+            old_presence = user.presence
+            new_presence = bool(data.get('presence', False))
+            logger.info(f"Changement de présence: {old_presence} -> {new_presence}")
+            print(f"[DEBUG] Changement de présence: {old_presence} -> {new_presence}")
+            
+            # Utiliser une transaction pour garantir la cohérence
+            from django.db import transaction
+            
+            with transaction.atomic():
+                # Méthode 1: Utiliser update() directement pour forcer la mise à jour en base
+                rows_updated = HSEUser.objects.filter(id=user_id).update(presence=new_presence)
+                logger.info(f"Update direct effectué: {rows_updated} ligne(s) mise(s) à jour")
+                print(f"[DEBUG] Update direct effectué: {rows_updated} ligne(s) mise(s) à jour")
+                
+                if rows_updated == 0:
+                    logger.warning(f"Aucune ligne mise à jour avec update(), essai avec save()")
+                    print(f"[WARNING] Aucune ligne mise à jour avec update(), essai avec save()")
+                    user.presence = new_presence
+                    user.save(update_fields=['presence'])
+                    rows_updated = 1
+                
+                # Vérifier directement dans la base avec une nouvelle requête
+                # pour s'assurer que la valeur est bien persistée
+                user_from_db = HSEUser.objects.get(id=user_id)
+                logger.info(f"Vérification directe DB (dans transaction), présence: {user_from_db.presence}")
+                print(f"[DEBUG] Vérification directe DB (dans transaction), présence: {user_from_db.presence}")
+                
+                # S'assurer que la valeur est correcte
+                if user_from_db.presence != new_presence:
+                    logger.error(f"ERREUR: La présence n'a pas été mise à jour! Attendu: {new_presence}, Obtenu: {user_from_db.presence}")
+                    print(f"[ERROR] ERREUR: La présence n'a pas été mise à jour! Attendu: {new_presence}, Obtenu: {user_from_db.presence}")
+                    # Essayer une dernière fois avec save()
+                    user_from_db.presence = new_presence
+                    user_from_db.save(update_fields=['presence'])
+                    user_from_db.refresh_from_db()
+                    logger.info(f"Après save() final, présence: {user_from_db.presence}")
+                    print(f"[DEBUG] Après save() final, présence: {user_from_db.presence}")
+            
+            # Recharger une dernière fois après la transaction pour confirmation finale
+            user_from_db = HSEUser.objects.get(id=user_id)
+            final_presence = user_from_db.presence
+            logger.info(f"Valeur finale confirmée (après transaction): {final_presence}")
+            print(f"[DEBUG] Valeur finale confirmée (après transaction): {final_presence}")
             
             return JsonResponse({
                 'success': True,
                 'user': {
-                    'id': user.id,
-                    'full_name': user.get_full_name(),
-                    'presence': user.presence,
-                    'updated_at': user.updated_at.isoformat()
+                    'id': user_from_db.id,
+                    'cin': user_from_db.cin,
+                    'full_name': user_from_db.get_full_name(),
+                    'presence': final_presence
                 },
-                'message': 'Présence mise à jour avec succès'
+                'message': f'Présence mise à jour de {old_presence} à {final_presence}',
+                'debug': {
+                    'old_presence': old_presence,
+                    'new_presence': new_presence,
+                    'final_presence': final_presence,
+                    'rows_updated': rows_updated
+                }
             })
+        else:
+            logger.warning(f"Champ 'presence' manquant dans les données: {data}")
+            return JsonResponse({
+                'success': False,
+                'error': 'Champ "presence" manquant dans la requête',
+                'received_data': data
+            }, status=400)
+    
+    except HSEUser.DoesNotExist:
+        logger.error(f"Utilisateur avec ID {user_id} non trouvé")
+        return JsonResponse({
+            'success': False,
+            'error': f'Utilisateur avec ID {user_id} non trouvé'
+        }, status=404)
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        logger.error(f"Erreur dans update_user_presence: {str(e)}\n{error_trace}")
+        print(f"[ERROR] {str(e)}\n{error_trace}")
+        return JsonResponse({
+            'success': False,
+            'error': f'Erreur: {str(e)}',
+            'traceback': error_trace
+        }, status=500)
+
+
+# ==================== API MODIFICATION DE SENSIBILISATION ====================
+
+@csrf_exempt
+def update_user_sensibilise(request, user_id):
+    """
+    Modifier la sensibilisation d'un utilisateur HSE
+    PATCH: /api/hse/users/{user_id}/sensibilise/
+    {
+        "sensibilise_avec_succes": true
+    }
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    logger.info(f"update_user_sensibilise appelé - Method: {request.method}, User ID: {user_id}")
+    
+    if request.method not in ['PATCH', 'POST', 'PUT']:
+        return JsonResponse({
+            'success': False,
+            'error': f'Méthode non autorisée: {request.method}. Utilisez PATCH, POST ou PUT.'
+        }, status=405)
+    
+    try:
+        user = HSEUser.objects.get(id=user_id)
+        
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError as e:
+            return JsonResponse({
+                'success': False,
+                'error': f'Format JSON invalide: {str(e)}'
+            }, status=400)
+        
+        if 'sensibilise_avec_succes' in data:
+            old_sensibilise = user.sensibilise_avec_succes
+            new_sensibilise = bool(data.get('sensibilise_avec_succes', False))
+            
+            from django.db import transaction
+            with transaction.atomic():
+                rows_updated = HSEUser.objects.filter(id=user_id).update(sensibilise_avec_succes=new_sensibilise)
+                if rows_updated == 0:
+                    user.sensibilise_avec_succes = new_sensibilise
+                    user.save(update_fields=['sensibilise_avec_succes'])
+            
+            user_from_db = HSEUser.objects.get(id=user_id)
+            final_sensibilise = user_from_db.sensibilise_avec_succes
+            
+            return JsonResponse({
+                'success': True,
+                'user': {
+                    'id': user_from_db.id,
+                    'cin': user_from_db.cin,
+                    'full_name': user_from_db.get_full_name(),
+                    'sensibilise_avec_succes': final_sensibilise
+                },
+                'message': f'Sensibilisation mise à jour de {old_sensibilise} à {final_sensibilise}'
+            })
+        else:
+            return JsonResponse({
+                'success': False,
+                'error': 'Champ "sensibilise_avec_succes" manquant dans la requête'
+            }, status=400)
     
     except HSEUser.DoesNotExist:
         return JsonResponse({
             'success': False,
-            'error': 'Utilisateur non trouvé'
+            'error': f'Utilisateur avec ID {user_id} non trouvé'
         }, status=404)
     except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        logger.error(f"Erreur dans update_user_sensibilise: {str(e)}\n{error_trace}")
         return JsonResponse({
             'success': False,
             'error': f'Erreur: {str(e)}'
+        }, status=500)
+
+
+# ==================== API SUPPRESSION UTILISATEUR ====================
+
+@csrf_exempt
+def delete_hse_user(request, user_id):
+    """
+    Supprimer un utilisateur HSE
+    DELETE: /api/hse/users/{user_id}/delete/
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    logger.info(f"delete_hse_user appelé - Method: {request.method}, User ID: {user_id}")
+    print(f"[DEBUG] delete_hse_user - Method: {request.method}, User ID: {user_id}")
+    
+    # Accepter DELETE et POST pour compatibilité
+    if request.method not in ['DELETE', 'POST']:
+        return JsonResponse({
+            'success': False,
+            'error': f'Méthode non autorisée: {request.method}. Utilisez DELETE ou POST.'
+        }, status=405)
+    
+    try:
+        user = HSEUser.objects.get(id=user_id)
+        user_cin = user.cin
+        user_name = user.get_full_name()
+        
+        # Supprimer l'utilisateur
+        user.delete()
+        logger.info(f"Utilisateur supprimé: {user_cin} ({user_name})")
+        print(f"[DEBUG] Utilisateur supprimé: {user_cin} ({user_name})")
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Utilisateur {user_name} (CIN: {user_cin}) supprimé avec succès',
+            'deleted_user': {
+                'id': user_id,
+                'cin': user_cin,
+                'name': user_name
+            }
+        })
+    
+    except HSEUser.DoesNotExist:
+        logger.error(f"Utilisateur avec ID {user_id} non trouvé")
+        return JsonResponse({
+            'success': False,
+            'error': f'Utilisateur avec ID {user_id} non trouvé'
+        }, status=404)
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        logger.error(f"Erreur dans delete_hse_user: {str(e)}\n{error_trace}")
+        print(f"[ERROR] {str(e)}\n{error_trace}")
+        return JsonResponse({
+            'success': False,
+            'error': f'Erreur lors de la suppression: {str(e)}',
+            'traceback': error_trace
         }, status=500)

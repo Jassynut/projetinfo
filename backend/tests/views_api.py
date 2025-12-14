@@ -213,15 +213,26 @@ class TestAttemptViewSet(viewsets.ModelViewSet):
         
         attempt.save()
         
-        # Mettre à jour le score de l'utilisateur HSE si lié
-        try:
-            hse_user = HSEUser.objects.get(test_user=request.user)
-            # Score = (pourcentage / 100) * 21
-            hse_user.score = round((attempt.overall_score_percentage / 100) * 21)
-            hse_user.reussite = attempt.passed
-            hse_user.save()
-        except HSEUser.DoesNotExist:
-            pass
+        # Mettre à jour le score et sensibilise_avec_succes de l'utilisateur HSE si lié
+        if attempt.passed:
+            try:
+                # Trouver l'utilisateur HSE correspondant via le CIN
+                hse_user = HSEUser.objects.get(cin=attempt.user.cin)
+                # Mettre à jour sensibilise_avec_succes si le test est réussi
+                hse_user.sensibilise_avec_succes = True
+                # Score = (pourcentage / 100) * 21 (si le champ existe)
+                if hasattr(hse_user, 'score'):
+                    hse_user.score = round((attempt.overall_score_percentage / 100) * 21)
+                # Note: Le champ 'presence' n'est pas mis à jour automatiquement
+                # Il doit être géré manuellement par un manager
+                hse_user.save(update_fields=['sensibilise_avec_succes'] + (['score'] if hasattr(hse_user, 'score') else []))
+            except HSEUser.DoesNotExist:
+                pass
+            except Exception as e:
+                # Logger l'erreur mais ne pas bloquer la soumission du test
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Erreur lors de la mise à jour de sensibilise_avec_succes: {str(e)}")
         
         response_data = TestAttemptDetailSerializer(attempt).data
         response_data['scores'] = scores
@@ -267,14 +278,21 @@ def list_versions(request):
         try:
             version = int(version)
         except (TypeError, ValueError):
-            return Response({'success': False, 'error': 'Version invalide'}, status=400)
+            return Response({'success': False, 'error': 'Version invalide. Doit être un nombre entier positif.'}, status=400)
+        
+        # Validation : Version doit être un entier positif
+        if version < 1:
+            return Response({
+                'success': False, 
+                'error': f'Version invalide. La version doit être un nombre entier positif (>= 1). Vous avez fourni : {version}'
+            }, status=400)
         try:
             test = Test.objects.create(
                 version=version,
                 description=description,
                 ordre_questions=[],
                 mandatory_questions=[],
-                total_questions=21,
+                total_questions=0,  # Sera mis à jour automatiquement selon ordre_questions
                 mandatory_questions_count=9,
                 is_active=True,
             )
@@ -297,13 +315,38 @@ def list_versions(request):
             status=201,
         )
 
-    qs = Test.objects.all().order_by('version')
-    data = []
-    for t in qs:
-        item = TestListSerializer(t).data
-        item['name'] = f"Version {t.version}"
-        data.append(item)
-    return Response({'versions': data})
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    try:
+        qs = Test.objects.all().order_by('version')
+        count = qs.count()
+        logger.info(f"Nombre de versions trouvées dans la base de données: {count}")
+        
+        data = []
+        for t in qs:
+            try:
+                item = TestListSerializer(t).data
+                item['name'] = f"Version {t.version}"
+                # S'assurer que created_at est inclus
+                if hasattr(t, 'created_at') and t.created_at:
+                    item['created_at'] = t.created_at.isoformat() if hasattr(t.created_at, 'isoformat') else str(t.created_at)
+                data.append(item)
+            except Exception as e:
+                logger.error(f"Erreur lors de la sérialisation de la version {t.id}: {str(e)}")
+                continue
+        
+        logger.info(f"Retour de {len(data)} versions depuis list_versions")
+        return Response({'versions': data})
+    except Exception as e:
+        logger.error(f"Erreur dans list_versions: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return Response({
+            'success': False,
+            'error': f'Erreur lors de la récupération des versions: {str(e)}',
+            'versions': []
+        }, status=500)
 
 
 @api_view(['GET'])
@@ -325,7 +368,9 @@ def version_detail(request, pk):
     if request.method == 'GET':
         data = TestDetailSerializer(test).data
         data['name'] = f"Version {test.version}"
-        return Response(data)
+        # S'assurer que ordre_questions est inclus (déjà dans le serializer maintenant)
+        # Retourner dans un format cohérent avec le frontend
+        return Response({'version': data})
     if request.method == 'PUT':
         description = request.data.get('description') or ''
         version = request.data.get('version') or request.data.get('name')
@@ -375,6 +420,37 @@ def version_add_question(request, pk):
     return Response({'success': True, 'ordre_questions': test.ordre_questions})
 
 
+@api_view(['PATCH'])
+@permission_classes([permissions.AllowAny])
+def version_update_order(request, pk):
+    """Mettre à jour l'ordre des questions d'une version"""
+    test = get_object_or_404(Test, pk=pk)
+    ordre_questions = request.data.get('ordre_questions')
+    
+    if ordre_questions is None:
+        return Response({'success': False, 'error': 'ordre_questions requis'}, status=400)
+    
+    if not isinstance(ordre_questions, list):
+        return Response({'success': False, 'error': 'ordre_questions doit être une liste'}, status=400)
+    
+    # Vérifier que tous les IDs sont valides
+    for qid in ordre_questions:
+        try:
+            Question.objects.get(id=qid)
+        except Question.DoesNotExist:
+            return Response({'success': False, 'error': f'Question avec ID {qid} non trouvée'}, status=404)
+    
+    test.ordre_questions = ordre_questions
+    test.total_questions = len(ordre_questions)  # Mettre à jour total_questions selon ordre_questions
+    test.save()
+    
+    return Response({
+        'success': True,
+        'ordre_questions': test.ordre_questions,
+        'total_questions': test.total_questions
+    })
+
+
 # =============================================================================
 # ENDPOINTS APPRENANT (compat maquette sans authentification)
 # =============================================================================
@@ -394,7 +470,7 @@ def verify_cni(request):
 def test_questions_public(request, test_id):
     test = get_object_or_404(Test, id=test_id, is_active=True)
     questions = test.get_questions_in_order()
-    serializer = QuestionDetailSerializer(questions, many=True)
+    serializer = QuestionDetailSerializer(questions, many=True, context={'request': request})
     return Response({'questions': serializer.data, 'test_id': test.id, 'version': test.version})
 
 
@@ -416,8 +492,16 @@ def test_submit_answer(request, test_id):
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
 def test_finish_public(request, test_id):
+    from django.utils import timezone
+    from authentication.models import TestUser
+    from hse_app.models import HSEUser
+    
     test = get_object_or_404(Test, id=test_id)
     provided_answers = request.data.get('answers') or {}
+    cin = request.data.get('cin', '').strip().upper()
+    langue = request.data.get('langue', 'fr')
+    time_taken = request.data.get('time_taken_seconds', 0)
+    
     cache_key = f"test_answers:{request.session.session_key}:{test_id}"
     cached_answers = cache.get(cache_key, {})
     # merge (answers payload has priority)
@@ -426,6 +510,7 @@ def test_finish_public(request, test_id):
     mandatory_correct = 0
     optional_correct = 0
     mandatory_ids = set(test.mandatory_questions or [])
+    user_answers_dict = {}
 
     for qid_str, data in cached_answers.items():
         try:
@@ -433,9 +518,37 @@ def test_finish_public(request, test_id):
             question = Question.objects.get(id=qid)
         except (ValueError, Question.DoesNotExist):
             continue
-        user_answer = data.get('answer') if isinstance(data, dict) else data
+        
+        # Extraire la réponse de l'utilisateur
+        # Le format peut être soit {"answer": bool} (du cache) soit directement bool (du frontend)
+        if isinstance(data, dict):
+            user_answer = data.get('answer')
+        else:
+            user_answer = data
+        
+        # Normaliser la réponse en booléen si nécessaire
+        # Gérer les cas où la réponse arrive comme chaîne "true"/"false" ou entier 1/0
+        if isinstance(user_answer, str):
+            user_answer = user_answer.lower().strip()
+            if user_answer in ['true', 'vrai', '1', 'yes', 'oui', 't']:
+                user_answer = True
+            elif user_answer in ['false', 'faux', '0', 'no', 'non', 'f']:
+                user_answer = False
+            else:
+                continue  # Réponse invalide, passer à la suivante
+        elif isinstance(user_answer, int):
+            user_answer = bool(user_answer)
+        elif user_answer is None:
+            continue  # Pas de réponse, passer à la suivante
+        
+        # Vérifier la réponse en utilisant la méthode check_answer du modèle
         is_correct = question.check_answer(user_answer)
-        if qid in mandatory_ids:
+        user_answers_dict[str(qid)] = user_answer
+        
+        # Déterminer si la question est obligatoire
+        is_mandatory_question = qid in mandatory_ids or question.is_mandatory
+        
+        if is_mandatory_question:
             if is_correct:
                 mandatory_correct += 1
         else:
@@ -443,21 +556,86 @@ def test_finish_public(request, test_id):
                 optional_correct += 1
 
     total_score = mandatory_correct + optional_correct
-    overall = total_score  # points = questions
+    total_mandatory = len(mandatory_ids) if mandatory_ids else 0
+    total_optional = test.total_questions - total_mandatory
+    
+    # Calculer les pourcentages
+    mandatory_score_percentage = (mandatory_correct / total_mandatory * 100) if total_mandatory > 0 else 0
+    optional_score_percentage = (optional_correct / total_optional * 100) if total_optional > 0 else 0
+    overall_score_percentage = (total_score / test.total_questions * 100) if test.total_questions > 0 else 0
+    
+    # Déterminer si le test est réussi (toutes les questions obligatoires doivent être correctes)
+    passed = (mandatory_correct == total_mandatory) if total_mandatory > 0 else False
+    
+    # Créer ou récupérer TestUser si CIN fourni
+    test_user = None
+    attempt = None
+    if cin:
+        try:
+            test_user, created = TestUser.objects.get_or_create(
+                cin=cin,
+                defaults={
+                    'username': f"user_{cin}",
+                    'full_name': f"User {cin}",
+                    'user_type': 'user'
+                }
+            )
+            
+            # Créer TestAttempt
+            attempt = TestAttempt.objects.create(
+                test=test,
+                user=test_user,
+                langue=langue,
+                user_answers=user_answers_dict,
+                mandatory_correct=mandatory_correct,
+                optional_correct=optional_correct,
+                mandatory_total=total_mandatory,
+                optional_total=total_optional,
+                mandatory_score_percentage=round(mandatory_score_percentage, 2),
+                optional_score_percentage=round(optional_score_percentage, 2),
+                overall_score_percentage=round(overall_score_percentage, 2),
+                passed=passed,
+                status='passed' if passed else 'failed',
+                time_taken_seconds=time_taken,
+                completed_at=timezone.now()
+            )
+            
+            # Mettre à jour sensibilise_avec_succes dans HSEUser
+            try:
+                hse_user = HSEUser.objects.get(cin=cin)
+                hse_user.sensibilise_avec_succes = passed
+                hse_user.save(update_fields=['sensibilise_avec_succes'])
+            except HSEUser.DoesNotExist:
+                pass
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Erreur mise à jour sensibilise_avec_succes: {str(e)}")
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Erreur création TestAttempt: {str(e)}")
+    
+    # Stocker aussi dans le cache pour compatibilité
     cache.set(f"test_result:{request.session.session_key}:{test_id}", {
-        'score': overall,
+        'score': total_score,
         'mandatory_correct': mandatory_correct,
         'optional_correct': optional_correct,
-        'test_version': test.version
+        'test_version': test.version,
+        'attempt_id': attempt.id if attempt else None,
+        'passed': passed
     }, 60 * 30)
     cache.delete(cache_key)
 
     return Response({
         'success': True,
-        'score': overall,
+        'score': total_score,
         'mandatory_correct': mandatory_correct,
         'optional_correct': optional_correct,
         'total_questions': test.total_questions,
+        'overall_score_percentage': round(overall_score_percentage, 2),
+        'passed': passed,
+        'attempt_id': attempt.id if attempt else None
     })
 
 
@@ -479,7 +657,7 @@ def test_result_public(request, test_id):
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from .models import Question, Test
 from .serializers_api import QuestionDetailSerializer
 
@@ -492,7 +670,8 @@ class QuestionViewSet(viewsets.ModelViewSet):
     serializer_class = QuestionDetailSerializer
     permission_classes = [permissions.AllowAny]
     authentication_classes = []
-    parser_classes = [MultiPartParser, FormParser]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+    pagination_class = None  # Désactiver la pagination pour retourner toutes les questions
 
     @action(detail=True, methods=['post'], url_path='associate_version')
     def associate_version(self, request, pk=None):
@@ -551,7 +730,27 @@ class QuestionViewSet(viewsets.ModelViewSet):
         })
     
     def create(self, request, *args, **kwargs):
+        # Validation stricte du question_code : Q1 à Q21 uniquement
+        question_code = request.data.get('question_code', '').strip().upper()
+        if question_code:
+            # Vérifier le format Q1-Q21
+            import re
+            if not re.match(r'^Q([1-9]|1[0-9]|2[01])$', question_code):
+                return Response({
+                    'success': False,
+                    'error': f'Code question invalide : "{question_code}". Seuls les codes Q1 à Q21 sont autorisés.'
+                }, status=status.HTTP_400_BAD_REQUEST)
         return super().create(request, *args, **kwargs)
 
     def update(self, request, *args, **kwargs):
+        # Validation stricte du question_code : Q1 à Q21 uniquement
+        question_code = request.data.get('question_code', '').strip().upper()
+        if question_code:
+            # Vérifier le format Q1-Q21
+            import re
+            if not re.match(r'^Q([1-9]|1[0-9]|2[01])$', question_code):
+                return Response({
+                    'success': False,
+                    'error': f'Code question invalide : "{question_code}". Seuls les codes Q1 à Q21 sont autorisés.'
+                }, status=status.HTTP_400_BAD_REQUEST)
         return super().update(request, *args, **kwargs)

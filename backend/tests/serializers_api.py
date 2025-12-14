@@ -7,6 +7,7 @@ from hse_app.serializers import QuestionSimpleSerializer, QuestionDetailSerializ
 class TestListSerializer(serializers.ModelSerializer):
     """Sérializer simplifié pour lister les tests"""
     questions_count = serializers.SerializerMethodField()
+    created_at = serializers.DateTimeField(read_only=True)
     
     class Meta:
         model = Test
@@ -14,7 +15,7 @@ class TestListSerializer(serializers.ModelSerializer):
             'id', 'version', 'description', 'duration_minutes',
             'total_questions', 'mandatory_questions_count', 
             'passing_score_optional', 'questions_count',
-            'is_active', 'created_at'
+            'ordre_questions', 'is_active', 'created_at'
         ]
     
     def get_questions_count(self, obj):
@@ -35,6 +36,7 @@ class TestDetailSerializer(serializers.ModelSerializer):
             'passing_score_optional', 'questions_count',
             'optional_questions_count', 'is_active',
             'questions', 'mandatory_questions_list', 'optional_questions_list',
+            'ordre_questions', 'mandatory_questions',
             'created_at', 'updated_at'
         ]
     
@@ -64,8 +66,8 @@ class TestCreateUpdateSerializer(serializers.ModelSerializer):
         ]
     
     def validate_version(self, value):
-        if value < 1 or value > 6:
-            raise serializers.ValidationError("Version doit être entre 1 et 6")
+        if value < 1:
+            raise serializers.ValidationError("Version doit être un nombre entier positif (>= 1)")
         return value
 
 

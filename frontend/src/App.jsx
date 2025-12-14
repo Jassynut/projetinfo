@@ -7,6 +7,7 @@ import DashboardHSE from "./pages/DashboardHSE";
 import GestionQuestionnaires from "./pages/GestionQuestionnaires";
 import GestionVersions from "./pages/GestionVersions";
 import GestionQuestions from "./pages/GestionQuestions";
+import ModifierVersion from "./pages/ModifierVersion";
 import ConsultationCertificats from "./pages/ConsultationCertificats";
 import SelectionTest from "./pages/SelectionTest";
 import CommencerTest from "./pages/CommencerTest";
@@ -23,6 +24,7 @@ export default function App() {
         <Route path="/hse-dashboard" element={<DashboardHSE />} />
         <Route path="/gestion-questionnaires" element={<GestionQuestionnaires />} />
         <Route path="/gerer-versions" element={<GestionVersions />} />
+        <Route path="/modifier-version/:versionId" element={<ModifierVersion />} />
         <Route path="/gerer-questions" element={<GestionQuestions />} />
         <Route path="/certificats" element={<ConsultationCertificats />} />
         <Route path="/test/selection" element={<SelectionTest />} />

@@ -129,6 +129,9 @@ def download_certificate_by_id(request, certificate_id):
             }, status=410)
         
         # Générer le HTML du certificat
+        # Si c'est un certificat de sensibilisation (test_version=0), utiliser le texte spécial
+        custom_text = "Vous avez réussi votre formation HSE" if certificate.test_version == 0 else None
+        
         html_string = render_to_string('certificats/certificate.html', {
             'certificate_number': certificate.certificate_number,
             'user_full_name': certificate.user_full_name,
@@ -137,7 +140,8 @@ def download_certificate_by_id(request, certificate_id):
             'score': certificate.score,
             'issued_date': certificate.issued_date.strftime('%d/%m/%Y'),
             'expiry_date': certificate.expiry_date.strftime('%d/%m/%Y'),
-            'days_until_expiry': certificate.days_until_expiry
+            'days_until_expiry': certificate.days_until_expiry,
+            'custom_text': custom_text
         })
         
         response = HttpResponse(content_type='application/pdf')
@@ -175,7 +179,23 @@ def search_certificate_by_name(request):
                     'error': 'Veuillez fournir un nom ou un CIN'
                 }, status=400)
             
-            # Rechercher les certificats
+            # Vérifier que le CIN existe dans HSEUser et que sensibilise_avec_succes est True
+            if user_cin:
+                try:
+                    from hse_app.models import HSEUser
+                    hse_user = HSEUser.objects.get(cin=user_cin)
+                    if not hse_user.sensibilise_avec_succes:
+                        return JsonResponse({
+                            'success': False,
+                            'error': 'Cet utilisateur n\'a pas été sensibilisé avec succès. Impossible de générer un certificat.'
+                        }, status=403)
+                except HSEUser.DoesNotExist:
+                    return JsonResponse({
+                        'success': False,
+                        'error': 'CIN non trouvé dans la base de données HSE. Veuillez vérifier le numéro.'
+                    }, status=404)
+            
+            # Rechercher les certificats existants
             query = Certificate.objects.all()
             
             if user_cin:
@@ -184,6 +204,51 @@ def search_certificate_by_name(request):
                 query = query.filter(user_full_name__icontains=user_name)
             
             query = query.order_by('-issued_date')
+            
+            # Si aucun certificat n'existe et que le CIN est fourni et sensibilisé, générer un nouveau certificat
+            if not query.exists() and user_cin:
+                try:
+                    from hse_app.models import HSEUser
+                    hse_user = HSEUser.objects.get(cin=user_cin)
+                    if hse_user.sensibilise_avec_succes:
+                        # Générer un nouveau certificat
+                        from datetime import timedelta
+                        certificate_number = f"HSE-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
+                        expiry_date = (datetime.now() + timedelta(days=365)).date()
+                        
+                        # Créer un certificat sans TestAttempt (certificat de sensibilisation)
+                        certificate = Certificate.objects.create(
+                            certificate_number=certificate_number,
+                            user_full_name=hse_user.get_full_name(),
+                            user_cin=hse_user.cin,
+                            test_version=0,  # Version 0 pour certificat de sensibilisation
+                            score=100,  # Score par défaut pour sensibilisation
+                            expiry_date=expiry_date
+                        )
+                        
+                        return JsonResponse({
+                            'success': True,
+                            'certificates': [{
+                                'id': str(certificate.id),
+                                'certificate_number': certificate.certificate_number,
+                                'user_full_name': certificate.user_full_name,
+                                'user_cin': certificate.user_cin,
+                                'test_version': certificate.test_version,
+                                'score': certificate.score,
+                                'issued_date': certificate.issued_date.isoformat(),
+                                'expiry_date': certificate.expiry_date.isoformat(),
+                                'is_expired': certificate.is_expired,
+                                'days_until_expiry': certificate.days_until_expiry,
+                                'download_url': f'/api/certificates/{certificate.id}/download/'
+                            }],
+                            'count': 1,
+                            'message': 'Certificat généré avec succès'
+                        })
+                except HSEUser.DoesNotExist:
+                    return JsonResponse({
+                        'success': False,
+                        'error': 'CIN non trouvé dans la base de données HSE'
+                    }, status=404)
             
             if not query.exists():
                 return JsonResponse({

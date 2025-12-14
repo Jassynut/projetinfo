@@ -5,6 +5,7 @@ from authentication import views
 from tests.views_api import list_versions, list_active_versions, version_detail
 from rest_framework.routers import DefaultRouter
 from tests.views_api import QuestionViewSet
+from hse_app import views as hse_views
 
 # Fonction pour rediriger vers le front-end React
 def redirect_to_front(request):
@@ -25,8 +26,13 @@ urlpatterns = [
     # AUTHENTIFICATION API
     path('api/auth/', include('authentication.urls')),
 
-    # HSE API
+    # HSE API (router DRF + endpoints simples)
     path('api/hse/', include('hse_app.urls_api')),
+    # HSE API (autres endpoints dans views.py)
+    path('api/hse/', include('hse_app.urls')),
+    # Import Excel utilisateurs HSE (alias direct)
+    path('api/users/import/', hse_views.import_hse_users, name='import_hse_users'),
+    path('api/users/import/preview/', hse_views.preview_hse_users_excel, name='preview_hse_users_excel'),
 
     # ALIAS PUBLICS VERSIONS (contournent l'auth du ViewSet)
     path('api/versions', list_versions, name='api-versions-list'),

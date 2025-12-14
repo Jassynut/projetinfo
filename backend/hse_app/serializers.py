@@ -16,8 +16,8 @@ class HSEUserListSerializer(serializers.ModelSerializer):
     class Meta:
         model = HSEUser
         fields = [
-            'id', 'nom', 'prénom', 'full_name', 'cin', 'email', 
-            'entite', 'entreprise', 'presence', 'reussite', 'score', 'taux_reussite'
+            'id', 'nom', 'prénom', 'full_name', 'cin', 
+            'entite', 'entreprise', 'presence', 'taux_reussite'
         ]
     
     def get_full_name(self, obj):
@@ -27,33 +27,18 @@ class HSEUserListSerializer(serializers.ModelSerializer):
 class HSEUserDetailSerializer(serializers.ModelSerializer):
     """Sérializer complet pour détails utilisateur HSE"""
     full_name = serializers.SerializerMethodField()
-    test_attempts_count = serializers.SerializerMethodField()
-    recent_attempts = serializers.SerializerMethodField()
     
     class Meta:
         model = HSEUser
         fields = [
-            'id', 'nom', 'prénom', 'full_name', 'cin', 'email',
+            'id', 'nom', 'prénom', 'full_name', 'cin',
             'entite', 'entreprise', 'chef_projet_ocp',
-            'presence', 'reussite', 'score', 'taux_reussite',
-            'test_attempts_count', 'recent_attempts',
-            'created_at', 'updated_at'
+            'presence', 'taux_reussite'
         ]
-        read_only_fields = ['created_at', 'updated_at', 'taux_reussite']
+        read_only_fields = ['taux_reussite']
     
     def get_full_name(self, obj):
         return obj.get_full_name()
-    
-    def get_test_attempts_count(self, obj):
-        if obj.test_user:
-            return obj.test_user.testattempt_set.count()
-        return 0
-    
-    def get_recent_attempts(self, obj):
-        if obj.test_user:
-            attempts = obj.test_user.testattempt_set.order_by('-started_at')[:5]
-            return TestAttemptListSerializer(attempts, many=True).data
-        return []
 
 
 class HSEUserCreateUpdateSerializer(serializers.ModelSerializer):
@@ -62,9 +47,9 @@ class HSEUserCreateUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = HSEUser
         fields = [
-            'nom', 'prénom', 'cin', 'email',
+            'nom', 'prénom', 'cin',
             'entite', 'entreprise', 'chef_projet_ocp',
-            'presence', 'reussite'
+            'presence'
         ]
         extra_kwargs = {
             'cin': {'validators': []}  # Retirer la validation d'unicité lors de la mise à jour
@@ -76,9 +61,6 @@ class HSEUserCreateUpdateSerializer(serializers.ModelSerializer):
         return value.upper()
 
 
-class HSEUserPresenceSerializer(serializers.Serializer):
-    """Sérializer pour modifier la présence"""
-    presence = serializers.BooleanField()
 
 
 # =============================================================================
@@ -98,14 +80,23 @@ class QuestionSimpleSerializer(serializers.ModelSerializer):
 
 class QuestionDetailSerializer(serializers.ModelSerializer):
     """Sérializer complet pour les questions"""
+    image_url = serializers.SerializerMethodField()
     
     class Meta:
         model = Question
         fields = [
             'id', 'question_code', 'enonce_fr', 'enonce_en', 'enonce_ar',
-            'reponse_correcte', 'is_mandatory', 'points', 'image', 'has_image',
+            'reponse_correcte', 'is_mandatory', 'points', 'image', 'image_url', 'has_image',
             'is_active', 'created_at', 'updated_at'
         ]
+    
+    def get_image_url(self, obj):
+        if obj.image:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.image.url)
+            return obj.image.url
+        return None
 
 
 class TestListSerializer(serializers.ModelSerializer):

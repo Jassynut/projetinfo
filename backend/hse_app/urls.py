@@ -1,13 +1,14 @@
 # hse_app/urls.py - CORRIGÉ
 from django.urls import path
 from . import views
-
+from hse_app import views_api
 urlpatterns = [
-    # Users HSE
-    path('users/search/', views.search_hse_user_by_cin, name='search_hse_user'),
+    # Users HSE - Endpoints simples
+    # Note: users/search/ est maintenant dans urls_api.py pour éviter les conflits avec le router DRF
     path('users/create/', views.create_hse_user, name='create_hse_user'),
-    path('users/', views.list_hse_users, name='list_hse_users'),
-    path('users/<int:user_id>/presence/', views.update_user_presence, name='update_presence'),  # ← AJOUTÉ ICI
+    path('users/<int:user_id>/presence/', views.update_user_presence, name='update_presence'),
+    path('users/<int:user_id>/sensibilise/', views.update_user_sensibilise, name='update_sensibilise'),
+    path('users/<int:user_id>/delete/', views.delete_hse_user, name='delete_hse_user'),
     
     # Tests HSE
     path('tests/', views.list_hse_tests, name='list_hse_tests'),
@@ -27,5 +28,4 @@ urlpatterns = [
     
     # Sync
     path('sync-users/', views.sync_test_users_with_hse, name='sync_users'),
-    path('upload_excel/', views.upload_excel, name='upload_excel'),
 ]

@@ -72,17 +72,21 @@ export default function ResultatTest() {
             </p>
 
             <div className="flex flex-col md:flex-row md:justify-center gap-3 mb-6">
-              <button
-                className="bg-blue-600 text-white px-5 py-3 rounded-lg shadow hover:bg-blue-700"
-                onClick={handleDownload}
-              >
-                Télécharger le certificat
-              </button>
+              {/* Afficher le bouton de téléchargement uniquement si le test est réussi */}
+              {/* Le test est réussi si passed=true ou si toutes les questions obligatoires sont correctes (9/9) */}
+              {(data?.passed === true || data?.mandatory_correct >= 9 || (data?.mandatory_correct === data?.mandatory_total && data?.mandatory_total > 0)) && (
+                <button
+                  className="bg-blue-600 text-white px-5 py-3 rounded-lg shadow hover:bg-blue-700"
+                  onClick={handleDownload}
+                >
+                  Télécharger le certificat
+                </button>
+              )}
               <button
                 className="bg-green-700 text-white px-5 py-3 rounded-lg shadow hover:bg-green-800"
                 onClick={() => navigate("/test/selection")}
               >
-                Refaire un test
+                {data?.passed === true ? "Revenir à la sélection" : "Revenir à la sélection"}
               </button>
             </div>
 

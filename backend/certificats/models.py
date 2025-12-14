@@ -9,12 +9,14 @@ class Certificate(models.Model):
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     
-    # Lien vers la tentative de test
+    # Lien vers la tentative de test (optionnel pour certificats de sensibilisation)
     test_attempt = models.OneToOneField(
         TestAttempt,
         on_delete=models.CASCADE,
         related_name='certificate',
-        verbose_name="Tentative de test"
+        verbose_name="Tentative de test",
+        null=True,
+        blank=True
     )
     
     # Données du certificat

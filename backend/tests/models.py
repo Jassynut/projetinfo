@@ -8,21 +8,11 @@ from django.conf import settings
 class Test(models.Model):
     """Test HSE avec questions et paramètres"""
     
-    # Version du test (1 à 6)
-    VERSION_CHOICES = [
-        (1, 'Version 1'),
-        (2, 'Version 2'),
-        (3, 'Version 3'),
-        (4, 'Version 4'),
-        (5, 'Version 5'),
-        (6, 'Version 6'),
-    ]
-    
+    # Version du test (entier positif, pas de limite maximale)
     version = models.IntegerField(
-        choices=VERSION_CHOICES,
         verbose_name="Version du test",
         unique=True,
-        validators=[MinValueValidator(1), MaxValueValidator(6)]
+        validators=[MinValueValidator(1)]
     )
     
     description = models.TextField(verbose_name="Description", blank=True)
@@ -36,9 +26,9 @@ class Test(models.Model):
     
     # Nombre de questions
     total_questions = models.IntegerField(
-        default=21,
+        default=0,
         verbose_name="Nombre total de questions",
-        validators=[MinValueValidator(1)]
+        validators=[MinValueValidator(0)]
     )
     
     # Questions obligatoires (9 questions)
@@ -394,7 +384,8 @@ class TestAttempt(models.Model):
         mandatory_correct = 0
         optional_correct = 0
         
-        mandatory_ids = set(self.test.mandatory_questions)
+        # Utiliser mandatory_questions du test si disponible, sinon utiliser is_mandatory des questions
+        mandatory_ids = set(self.test.mandatory_questions) if self.test.mandatory_questions else set()
         
         for question_id_str, user_answer in self.user_answers.items():
             try:
@@ -408,9 +399,28 @@ class TestAttempt(models.Model):
                 if user_answer is None:
                     continue
                 
+                # Normaliser la réponse en booléen si nécessaire
+                # Gérer les cas où la réponse arrive comme chaîne "true"/"false" ou entier 1/0
+                if isinstance(user_answer, str):
+                    user_answer = user_answer.lower().strip()
+                    if user_answer in ['true', 'vrai', '1', 'yes', 'oui', 't']:
+                        user_answer = True
+                    elif user_answer in ['false', 'faux', '0', 'no', 'non', 'f']:
+                        user_answer = False
+                    else:
+                        continue  # Réponse invalide, passer à la suivante
+                elif isinstance(user_answer, int):
+                    user_answer = bool(user_answer)
+                
+                # Vérifier la réponse en utilisant la méthode check_answer du modèle
                 is_correct = question.check_answer(user_answer)
                 
-                if question_id in mandatory_ids:
+                # Déterminer si la question est obligatoire :
+                # 1. Si elle est dans mandatory_questions du test
+                # 2. Sinon, si is_mandatory de la question est True
+                is_mandatory_question = question_id in mandatory_ids or question.is_mandatory
+                
+                if is_mandatory_question:
                     if is_correct:
                         mandatory_correct += 1
                 else:
@@ -421,7 +431,21 @@ class TestAttempt(models.Model):
                 continue
         
         # Réussite: toutes les questions obligatoires correctes
-        passed = (mandatory_correct == self.mandatory_total)
+        # Calculer le total des questions obligatoires
+        total_mandatory = len(mandatory_ids) if mandatory_ids else 0
+        if total_mandatory == 0:
+            # Si aucune question n'est marquée comme obligatoire dans le test,
+            # compter celles avec is_mandatory=True
+            for question_id_str in self.user_answers.keys():
+                try:
+                    question_id = int(question_id_str)
+                    question = Question.objects.get(id=question_id)
+                    if question.is_mandatory:
+                        total_mandatory += 1
+                except (Question.DoesNotExist, ValueError):
+                    continue
+        
+        passed = (mandatory_correct == total_mandatory) if total_mandatory > 0 else False
         
         return {
             'total': mandatory_correct + optional_correct,

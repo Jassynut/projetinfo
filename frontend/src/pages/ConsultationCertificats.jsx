@@ -3,7 +3,6 @@ import axios from "axios";
 import TopNav from "../components/TopNav";
 
 const API_BASE = "http://127.0.0.1:8000";
-const CNI_REGEX = /^[A-Z]{1,2}\d{5,6}$/i;
 
 export default function ConsultationCertificats() {
   const [cni, setCni] = useState("");
@@ -14,8 +13,8 @@ export default function ConsultationCertificats() {
 
   const handleSearch = async () => {
     const value = cni.trim().toUpperCase();
-    if (!CNI_REGEX.test(value)) {
-      setError("Format CNI invalide (ex: AE112456)");
+    if (!value) {
+      setError("Veuillez entrer un CIN");
       return;
     }
     setError("");
@@ -49,10 +48,10 @@ export default function ConsultationCertificats() {
     }
   };
 
-  const handleDownload = async (attemptId) => {
+  const handleDownload = async (certificateId) => {
     try {
       const response = await axios.get(
-        `${API_BASE}/api/certificats/${attemptId}/pdf/`,
+        `${API_BASE}/api/certificats/${certificateId}/pdf`,
         {
           responseType: "blob",
         }
@@ -63,12 +62,13 @@ export default function ConsultationCertificats() {
       link.href = url;
       link.setAttribute(
         "download",
-        `certificat-hse-${attemptId}.pdf`
+        `certificat-hse-${certificateId}.pdf`
       );
       document.body.appendChild(link);
       link.click();
       link.remove();
     } catch (err) {
+      console.error("Erreur téléchargement:", err);
       setError("Impossible de télécharger le certificat.");
     }
   };
@@ -90,7 +90,7 @@ export default function ConsultationCertificats() {
         <div className="flex flex-col md:flex-row gap-3 mb-4">
           <input
             className="flex-1 border rounded-lg p-3"
-            placeholder="Entrez le code CNI (ex: AE112456)"
+            placeholder="Entrez le code CIN"
             value={cni}
             onChange={(e) => setCni(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && handleSearch()}

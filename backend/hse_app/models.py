@@ -9,6 +9,14 @@ from django.conf import settings
 from django.utils.translation import gettext_lazy as _
 
 # =============================================================================
+# FONCTIONS HELPER
+# =============================================================================
+
+def get_today_date():
+    """Retourne la date du jour pour le champ date_ajout"""
+    return timezone.now().date()
+
+# =============================================================================
 # MODÈLES PRINCIPAUX HSE
 # =============================================================================
 
@@ -18,7 +26,6 @@ class HSEUser(models.Model):
     # Informations personnelles
     nom = models.CharField(max_length=100, verbose_name="Nom")
     prénom = models.CharField(max_length=100, verbose_name="Prénom")
-    email = models.EmailField(verbose_name="Adresse email")
     cin = models.CharField(max_length=20, unique=True, verbose_name="CIN")    
     
     # Informations professionnelles
@@ -26,26 +33,12 @@ class HSEUser(models.Model):
     entreprise = models.CharField(max_length=100, verbose_name="Entreprise")
     chef_projet_ocp = models.CharField(max_length=100, blank=True, verbose_name="Chef de projet OCP")
     
-    # Statut et performance
-    presence = models.BooleanField(default=False, verbose_name="Présent")
-    reussite = models.BooleanField(default=False, verbose_name="Réussi(e)")
-    score = models.IntegerField(
-        default=0,
-        validators=[MinValueValidator(0), MaxValueValidator(21)],
-        verbose_name="Score global (/21)"
-    )
+    # Statut
+    presence = models.BooleanField(default=False, verbose_name="Présence")
+    sensibilise_avec_succes = models.BooleanField(default=False, verbose_name="Sensibilisé avec succès")
     
-    test_user = models.OneToOneField(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='hse_user',
-        verbose_name="Utilisateur d'authentification"
-    )
-    
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Date de création")
-    updated_at = models.DateTimeField(auto_now=True, verbose_name="Dernière modification")
+    # Date d'ajout
+    date_ajout = models.DateField(default=get_today_date, verbose_name="Date d'ajout")
     
     class Meta:
         verbose_name = "Utilisateur HSE"
@@ -56,6 +49,7 @@ class HSEUser(models.Model):
             models.Index(fields=['entite']),
             models.Index(fields=['entreprise']),
             models.Index(fields=['cin']),  # Ajouter index pour recherche rapide par CIN
+            models.Index(fields=['date_ajout']),  # Index pour filtrage par date
         ]
     
     def __str__(self):

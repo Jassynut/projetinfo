@@ -8,17 +8,13 @@ export default function GestionQuestionnaires() {
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-green-300 p-10">
       <TopNav className="mb-4" />
       {/* Header */}
-      <div className="flex justify-between items-center mb-12">
+      <div className="flex items-center mb-12">
         <div className="flex items-center gap-3">
           <img src="/ocp-logo.png" alt="logo" className="w-12" />
           <h1 className="text-xl font-bold text-green-900">
             Induction HSE - Jorf Lasfar
           </h1>
         </div>
-
-        <a href="/dashboard" className="text-green-700 font-semibold hover:underline">
-          Accueil
-        </a>
       </div>
 
       {/* Title */}

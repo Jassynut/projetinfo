@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
-import TopNav from "../components/TopNav";
 
 const API_BASE = "http://127.0.0.1:8000";
 
@@ -31,17 +30,45 @@ export default function GestionVersions() {
     setLoading(true);
     setError("");
     try {
-      const resActives = await axios.get(`${API_BASE}/api/versions/actives`);
-      let items = resActives.data?.versions || [];
-      if (!items.length) {
-        const resAll = await axios.get(`${API_BASE}/api/versions`);
-        items = resAll.data?.versions || resAll.data?.tests || resAll.data || [];
+      // Récupérer toutes les versions (pas seulement les actives) pour la gestion
+      // Essayer d'abord sans trailing slash, puis avec
+      let resAll;
+      try {
+        resAll = await axios.get(`${API_BASE}/api/versions`);
+      } catch (err) {
+        try {
+          resAll = await axios.get(`${API_BASE}/api/versions/`);
+        } catch (err2) {
+          throw err; // Re-throw la première erreur
+        }
       }
-      items = items.map((v) => ({ ...v, name: v.name || `Version ${v.version}` }));
+      
+      let items = resAll.data?.versions || resAll.data?.tests || resAll.data || [];
+      
+      // Si aucune version n'est trouvée, essayer les versions actives
+      if (!items.length) {
+        try {
+          const resActives = await axios.get(`${API_BASE}/api/versions/actives`);
+          items = resActives.data?.versions || [];
+        } catch (err) {
+          console.warn("Erreur lors de la récupération des versions actives:", err);
+        }
+      }
+      
+      // Normaliser les données
+      items = items.map((v) => ({ 
+        ...v, 
+        name: v.name || `Version ${v.version || ''}`,
+        // Utiliser questions_count (basé sur ordre_questions) ou calculer depuis ordre_questions
+        total_questions: v.questions_count || (v.ordre_questions ? v.ordre_questions.length : 0) || v.total_questions || 0,
+        created_at: v.created_at || v.createdAt || null
+      }));
+      
+      console.log("Versions chargées:", items);
       setVersions(items);
     } catch (err) {
-      console.error(err);
-      setError("Impossible de charger les versions.");
+      console.error("Erreur lors du chargement des versions:", err);
+      setError(`Impossible de charger les versions: ${err.response?.data?.error || err.message || "Erreur inconnue"}`);
       setVersions([]);
     } finally {
       setLoading(false);
@@ -68,6 +95,17 @@ export default function GestionVersions() {
       setError("Le nom de la version est obligatoire.");
       return;
     }
+    
+    // Validation : Version doit être un entier positif
+    const versionMatch = form.name.match(/Version\s*(\d+)/i);
+    if (versionMatch) {
+      const versionNum = parseInt(versionMatch[1]);
+      if (versionNum < 1) {
+        setError(`Version invalide. La version doit être un nombre entier positif (>= 1). Vous avez fourni : Version ${versionNum}`);
+        return;
+      }
+    }
+    
     setLoading(true);
     setError("");
     try {
@@ -86,7 +124,8 @@ export default function GestionVersions() {
       fetchVersions();
     } catch (err) {
       console.error(err);
-      setError("Échec de l’enregistrement de la version.");
+      const errorMsg = err.response?.data?.error || "Échec de l'enregistrement de la version.";
+      setError(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -110,14 +149,13 @@ export default function GestionVersions() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-green-300 p-8">
-      <TopNav className="mb-4" />
       <div className="flex items-center justify-between mb-10">
         <div className="flex items-center gap-3">
           <img src="/ocp-logo.png" alt="logo" className="w-12" />
           <div>
             <h1 className="text-2xl font-bold text-green-900">Gestion des versions</h1>
             <p className="text-sm text-gray-700">
-              Gérez les versions du test HSE (21 questions par version).
+              Gérez les versions du test HSE.
             </p>
           </div>
         </div>
@@ -150,29 +188,43 @@ export default function GestionVersions() {
               </tr>
             </thead>
             <tbody>
-              {sortedVersions.map((v) => (
+              {loading && (
+                <tr>
+                  <td colSpan="4" className="p-4 text-center text-gray-500">
+                    <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-green-700"></div>
+                    <p className="mt-2">Chargement des versions...</p>
+                  </td>
+                </tr>
+              )}
+              {!loading && sortedVersions.length > 0 && sortedVersions.map((v) => (
                 <tr key={v.id} className="hover:bg-green-50">
                   <td className="p-3 border">
-                    {v.name || `Version ${v.version}`}
+                    {v.name || `Version ${v.version || v.id}`}
                   </td>
                   <td className="p-3 border">
-                    {v.total_questions || v.totalQuestions || 21}
+                    {v.questions_count || (v.ordre_questions ? v.ordre_questions.length : 0) || v.total_questions || 0}
                   </td>
                   <td className="p-3 border">
                     {v.created_at
-                      ? new Date(v.created_at).toLocaleDateString()
+                      ? new Date(v.created_at).toLocaleDateString('fr-FR')
                       : "—"}
                   </td>
                   <td className="p-3 border text-center space-x-2">
                     <button
+                      onClick={() => window.location.href = `/modifier-version/${v.id}`}
+                      className="px-3 py-1 rounded bg-green-600 text-white hover:bg-green-700"
+                    >
+                      Modifier ordre
+                    </button>
+                    <button
                       onClick={() => openEdit(v)}
-                      className="px-3 py-1 rounded bg-blue-600 text-white"
+                      className="px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-700"
                     >
                       Modifier
                     </button>
                     <button
                       onClick={() => handleDelete(v.id)}
-                      className="px-3 py-1 rounded bg-red-600 text-white"
+                      className="px-3 py-1 rounded bg-red-600 text-white hover:bg-red-700"
                     >
                       Supprimer
                     </button>
@@ -182,13 +234,12 @@ export default function GestionVersions() {
               {!loading && sortedVersions.length === 0 && (
                 <tr>
                   <td colSpan="4" className="p-4 text-center text-gray-500">
-                    Aucune version disponible.
+                    Aucune version disponible. Cliquez sur "Créer une version" pour en ajouter une.
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
-          {loading && <p className="text-center py-4 text-gray-600">Chargement...</p>}
         </div>
       </div>
 
@@ -216,7 +267,7 @@ export default function GestionVersions() {
                   rows={3}
                   value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  placeholder="Détails sur cette version (21 questions)..."
+                  placeholder="Détails sur cette version..."
                 />
               </div>
             </div>

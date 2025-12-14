@@ -1,16 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
-import TopNav from "../components/TopNav";
 
 const API_BASE = "http://127.0.0.1:8000";
 
 export default function GestionQuestions() {
   const [questions, setQuestions] = useState([]);
-  const [versions, setVersions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState(null);
+  const [sortByNumber, setSortByNumber] = useState(false);
   const [form, setForm] = useState({
     question_code: "",
     enonce_fr: "",
@@ -19,22 +18,24 @@ export default function GestionQuestions() {
     categorie: "",
     reponse_correcte: true,
     image: null,
-    version_id: "",
   });
 
   const orderedQuestions = useMemo(
-    () =>
-      [...questions].sort((a, b) => {
-        const numA = parseInt(a.question_code?.replace(/\D/g, "") || "0", 10);
-        const numB = parseInt(b.question_code?.replace(/\D/g, "") || "0", 10);
-        return numA - numB;
-      }),
-    [questions]
+    () => {
+      if (sortByNumber) {
+        return [...questions].sort((a, b) => {
+          const numA = parseInt(a.question_code?.replace(/\D/g, "") || a.id || "0", 10);
+          const numB = parseInt(b.question_code?.replace(/\D/g, "") || b.id || "0", 10);
+          return numA - numB;
+        });
+      }
+      return questions;
+    },
+    [questions, sortByNumber]
   );
 
   useEffect(() => {
     fetchQuestions();
-    fetchVersions();
   }, []);
 
   const fetchQuestions = async () => {
@@ -51,20 +52,6 @@ export default function GestionQuestions() {
     }
   };
 
-  const fetchVersions = async () => {
-    try {
-      const resActives = await axios.get(`${API_BASE}/api/versions/actives`);
-      let items = resActives.data?.versions || [];
-      if (!items.length) {
-        const resAll = await axios.get(`${API_BASE}/api/versions`);
-        items = resAll.data?.versions || resAll.data?.tests || resAll.data || [];
-      }
-      items = items.map((v) => ({ ...v, name: v.name || `Version ${v.version}` }));
-      setVersions(items);
-    } catch (err) {
-      setVersions([]);
-    }
-  };
 
   const openCreate = () => {
     setEditingQuestion(null);
@@ -76,7 +63,6 @@ export default function GestionQuestions() {
       categorie: "",
       reponse_correcte: true,
       image: null,
-      version_id: "",
     });
     setShowModal(true);
   };
@@ -91,7 +77,6 @@ export default function GestionQuestions() {
       categorie: q.categorie || "",
       reponse_correcte: !!q.reponse_correcte,
       image: null,
-      version_id: q.version_id || "",
     });
     setShowModal(true);
   };
@@ -103,6 +88,19 @@ export default function GestionQuestions() {
     }
     if (!form.question_code.trim()) {
       setError("Le code question est obligatoire (ex: Q1).");
+      return;
+    }
+    
+    // Validation stricte : Q1 à Q21 uniquement
+    const codeUpper = form.question_code.trim().toUpperCase();
+    const codeMatch = codeUpper.match(/^Q(\d+)$/);
+    if (!codeMatch) {
+      setError(`Code question invalide : "${form.question_code}". Format attendu : Q1, Q2, ..., Q21`);
+      return;
+    }
+    const codeNum = parseInt(codeMatch[1]);
+    if (codeNum < 1 || codeNum > 21) {
+      setError(`Code question invalide : "${form.question_code}". Seuls les codes Q1 à Q21 sont autorisés.`);
       return;
     }
 
@@ -148,23 +146,13 @@ export default function GestionQuestions() {
         questionId = response.data?.id || editingQuestion?.id;
       }
 
-      // Associer à une version si fournie
-      if (form.version_id && questionId) {
-        try {
-          await axios.post(`${API_BASE}/api/versions/${form.version_id}/questions/add`, {
-            question_id: questionId
-          });
-        } catch (assocError) {
-          console.warn("Association échouée, mais question créée:", assocError);
-          // Continue même si l'association échoue
-        }
-      }
 
       setShowModal(false);
       fetchQuestions();
     } catch (err) {
       console.error("Erreur:", err.response?.data || err.message);
-      setError("Échec de l'enregistrement. " + (err.response?.data?.error || ""));
+      const errorMsg = err.response?.data?.error || err.response?.data?.message || "Échec de l'enregistrement.";
+      setError(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -186,9 +174,38 @@ export default function GestionQuestions() {
     }
   };
 
+  const handleToggleMandatory = async (id, isMandatory) => {
+    setLoading(true);
+    setError("");
+    try {
+      // Récupérer la question actuelle
+      const question = questions.find(q => q.id === id);
+      if (!question) {
+        setError("Question non trouvée.");
+        return;
+      }
+
+      // Mettre à jour la question avec is_mandatory
+      await axios.patch(`${API_BASE}/api/questions/${id}/`, {
+        is_mandatory: isMandatory
+      }, {
+        headers: { "Content-Type": "application/json" }
+      });
+
+      // Mettre à jour l'état local
+      setQuestions(questions.map(q => 
+        q.id === id ? { ...q, is_mandatory: isMandatory } : q
+      ));
+    } catch (err) {
+      console.error("Erreur mise à jour obligatoire:", err);
+      setError("Échec de la mise à jour du statut obligatoire.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-green-300 p-8">
-      <TopNav className="mb-4" />
       <div className="flex items-center justify-between mb-10">
         <div className="flex items-center gap-3">
           <img src="/ocp-logo.png" alt="logo" className="w-12" />
@@ -219,11 +236,18 @@ export default function GestionQuestions() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-green-50 text-green-700 font-semibold">
-                <th className="p-3 border">Code</th>
+                <th 
+                  className="p-3 border cursor-pointer hover:bg-green-100 select-none"
+                  onClick={() => setSortByNumber(!sortByNumber)}
+                  title="Cliquez pour trier par numéro"
+                >
+                  Code {sortByNumber ? "↓" : ""}
+                </th>
                 <th className="p-3 border">Question (FR)</th>
                 <th className="p-3 border">Question (AR)</th>
                 <th className="p-3 border">Question (EN)</th>
                 <th className="p-3 border">Réponse correcte</th>
+                <th className="p-3 border text-center">Question Obligatoire</th>
                 <th className="p-3 border text-center">Actions</th>
               </tr>
             </thead>
@@ -235,6 +259,15 @@ export default function GestionQuestions() {
                   <td className="p-3 border">{q.enonce_ar || "-"}</td>
                   <td className="p-3 border">{q.enonce_en || "-"}</td>
                   <td className="p-3 border">{q.reponse_correcte ? "Oui" : "Non"}</td>
+                  <td className="p-3 border text-center">
+                    <input
+                      type="checkbox"
+                      checked={q.is_mandatory || false}
+                      onChange={(e) => handleToggleMandatory(q.id, e.target.checked)}
+                      className="w-5 h-5 cursor-pointer"
+                      title="Cocher pour marquer comme obligatoire"
+                    />
+                  </td>
                   <td className="p-3 border text-center space-x-2">
                     <button
                       onClick={() => openEdit(q)}
@@ -253,7 +286,7 @@ export default function GestionQuestions() {
               ))}
               {!loading && orderedQuestions.length === 0 && (
                 <tr>
-                  <td colSpan="6" className="p-4 text-center text-gray-500">
+                  <td colSpan="7" className="p-4 text-center text-gray-500">
                     Aucune question disponible.
                   </td>
                 </tr>
@@ -338,22 +371,6 @@ export default function GestionQuestions() {
                   className="w-full border rounded-lg p-2"
                   disabled={loading}
                 />
-              </div>
-              <div>
-                <label className="block font-medium mb-1">Associer à une version</label>
-                <select
-                  className="w-full border rounded-lg p-2"
-                  value={form.version_id}
-                  onChange={(e) => setForm({ ...form, version_id: e.target.value })}
-                  disabled={loading}
-                >
-                  <option value="">Aucune</option>
-                  {versions.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.name || `Version ${v.version}`}
-                    </option>
-                  ))}
-                </select>
               </div>
             </div>
 

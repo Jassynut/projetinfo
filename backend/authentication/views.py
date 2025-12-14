@@ -443,69 +443,29 @@ def calculate_score(test_session):
 
 #==================== API POUR IMPORTER APPRENANTS ====================
 
+# =============================================================================
+# DÉPRÉCIÉ : Cette classe utilise l'ancien modèle TestUser
+# Utilisez maintenant : POST /api/users/import/ pour importer dans HSEUser
+# =============================================================================
 class UploadApprenantsView(APIView):
     """
-    Upload d'un fichier Excel pour importer des apprenants HSE.
+    DÉPRÉCIÉ : Upload d'un fichier Excel pour importer des apprenants HSE.
+    Cette vue utilise l'ancien modèle TestUser.
+    
+    NOUVEAU ENDPOINT : POST /api/users/import/ (utilise HSEUser)
     """
     def post(self, request):
-        excel_file = request.FILES.get("file")
+        return Response(
+            {
+                "error": "Cette endpoint est déprécié. Utilisez POST /api/users/import/ à la place.",
+                "deprecated": True
+            },
+            status=status.HTTP_410_GONE
+        )
 
-        if not excel_file:
-            return Response(
-                {"error": "Aucun fichier n'a été envoyé."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # Appel du service d'import
-        result = importexcel(excel_file)
-
-        if result.get("status") == "error":
-            return Response(result, status=status.HTTP_400_BAD_REQUEST)
-
-        return Response(result, status=status.HTTP_201_CREATED)
-
-from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-import pandas as pd
-
-@csrf_exempt
-def upload_excel(request):
-    if request.method == "POST":
-        excel_file = request.FILES.get("file")
-
-        if not excel_file:
-            return JsonResponse({"success": False, "error": "Aucun fichier reçu"})
-
-        try:
-            # Lire sans header
-            df_raw = pd.read_excel(excel_file, header=None)
-
-            # Trouver la ligne contenant "Entité" (l'en-tête réelle)
-            header_row = None
-            for i, row in df_raw.iterrows():
-                if row.astype(str).str.contains("Entité").any():
-                    header_row = i
-                    break
-
-            if header_row is None:
-                return JsonResponse({"success": False, "error": "Impossible de trouver l'en-tête dans ce fichier."})
-
-            # Recharger le fichier en utilisant la ligne trouvée comme header
-            df = pd.read_excel(excel_file, header=header_row)
-
-            # Supprimer colonnes 'Unnamed'
-            df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
-
-            # Supprimer lignes vides
-            df = df.dropna(how="all")
-
-            # Reset index
-            df = df.reset_index(drop=True)
-
-            return JsonResponse({"success": True, "data": df.to_dict(orient="records")})
-
-        except Exception as e:
-            print("🔥 ERREUR DJANGO :", e)
-            return JsonResponse({"success": False, "error": str(e)})
-
-    return JsonResponse({"success": False, "error": "Méthode non autorisée"})
+# =============================================================================
+# DÉPRÉCIÉ : Cette fonction a été déplacée vers hse_app/views_api.py
+# Utilisez maintenant : POST /api/hse/upload_excel/ pour prévisualiser Excel
+# =============================================================================
+# La fonction upload_excel a été unifiée dans hse_app/views_api.py
+# pour éviter la duplication de code.

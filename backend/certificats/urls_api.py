@@ -7,9 +7,10 @@ router = DefaultRouter()
 router.register(r'', CertificateViewSet, basename='certificate-viewset')
 
 urlpatterns = [
-    path('', include(router.urls)),
-    path('search-public/', search_certificate_by_name, name='search-certificate-public'),
-    # Alias FR sans auth
+    # Routes spécifiques AVANT le router pour éviter les conflits
     path('recherche/', search_certificate_public_fr, name='certificat-recherche-fr'),
-    path('<int:pk>/pdf', download_certificate_public_fr, name='certificat-pdf-fr'),
+    path('search-public/', search_certificate_by_name, name='search-certificate-public'),
+    path('<str:pk>/pdf', download_certificate_public_fr, name='certificat-pdf-fr'),
+    # Router DRF (doit être en dernier)
+    path('', include(router.urls)),
 ]

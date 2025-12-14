@@ -10,7 +10,7 @@ from datetime import timedelta
 from .models import HSEUser, HSEManager
 from .serializers import (
     HSEUserListSerializer, HSEUserDetailSerializer, HSEUserCreateUpdateSerializer,
-    HSEUserPresenceSerializer, HSEManagerListSerializer, HSEManagerDetailSerializer,
+    HSEManagerListSerializer, HSEManagerDetailSerializer,
     HSEManagerCreateUpdateSerializer
 )
 from tests.models import Test, TestAttempt
@@ -40,14 +40,22 @@ class HSEUserViewSet(viewsets.ModelViewSet):
     """
     
     queryset = HSEUser.objects.all()
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]  # Permettre l'accès en lecture sans auth
     pagination_class = PageNumberPagination
+    
+    def get_permissions(self):
+        """
+        Permettre la lecture sans auth, mais exiger l'auth pour les modifications
+        """
+        if self.action in ['list', 'retrieve']:
+            return [permissions.AllowAny()]
+        return [permissions.IsAuthenticated()]
     
     def get_serializer_class(self):
         if self.action == 'retrieve':
             return HSEUserDetailSerializer
-        elif self.action == 'update-presence':
-            return HSEUserPresenceSerializer
+        elif self.action == 'update_presence':
+            return HSEUserCreateUpdateSerializer
         elif self.action in ['create', 'update', 'partial_update']:
             return HSEUserCreateUpdateSerializer
         return HSEUserListSerializer
@@ -74,12 +82,7 @@ class HSEUserViewSet(viewsets.ModelViewSet):
         if presence in ['true', 'false']:
             queryset = queryset.filter(presence=presence.lower() == 'true')
         
-        # Filtrer par réussite
-        reussite = self.request.query_params.get('reussite')
-        if reussite in ['true', 'false']:
-            queryset = queryset.filter(reussite=reussite.lower() == 'true')
-        
-        return queryset.order_by('-updated_at')
+        return queryset.order_by('nom', 'prénom')
     
     @action(detail=True, methods=['patch'])
     def update_presence(self, request, pk=None):
@@ -88,8 +91,9 @@ class HSEUserViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
-        user.presence = serializer.validated_data['presence']
-        user.save()
+        if 'presence' in serializer.validated_data:
+            user.presence = serializer.validated_data['presence']
+            user.save()
         
         return Response({
             'success': True,
@@ -102,8 +106,12 @@ class HSEUserViewSet(viewsets.ModelViewSet):
         """Récupérer l'historique des tests d'un utilisateur"""
         user = self.get_object()
         
-        if user.test_user:
-            attempts = user.test_user.testattempt_set.all().order_by('-started_at')
+        # Récupérer les tentatives par CIN
+        from authentication.models import TestUser
+        from tests.models import TestAttempt
+        try:
+            test_user = TestUser.objects.get(cin=user.cin)
+            attempts = TestAttempt.objects.filter(user=test_user).order_by('-started_at')
             serializer = TestAttemptListSerializer(attempts, many=True)
             
             return Response({
@@ -111,6 +119,13 @@ class HSEUserViewSet(viewsets.ModelViewSet):
                 'user_id': user.id,
                 'attempts_count': attempts.count(),
                 'attempts': serializer.data
+            })
+        except TestUser.DoesNotExist:
+            return Response({
+                'success': True,
+                'user_id': user.id,
+                'attempts_count': 0,
+                'attempts': []
             })
         
         return Response({
@@ -148,8 +163,6 @@ class HSEUserViewSet(viewsets.ModelViewSet):
         """Statistiques globales des utilisateurs"""
         total_users = HSEUser.objects.count()
         present_users = HSEUser.objects.filter(presence=True).count()
-        successful_users = HSEUser.objects.filter(reussite=True).count()
-        avg_score = HSEUser.objects.aggregate(Avg('score'))['score__avg'] or 0
         
         return Response({
             'success': True,
@@ -157,9 +170,8 @@ class HSEUserViewSet(viewsets.ModelViewSet):
                 'total_users': total_users,
                 'present_users': present_users,
                 'present_percentage': round((present_users / total_users * 100) if total_users > 0 else 0, 1),
-                'successful_users': successful_users,
-                'success_rate': round((successful_users / total_users * 100) if total_users > 0 else 0, 1),
-                'average_score': round(avg_score, 2)
+                'absent_users': total_users - present_users,
+                'absent_percentage': round(((total_users - present_users) / total_users * 100) if total_users > 0 else 0, 1)
             }
         })
 
@@ -189,3 +201,83 @@ class HSEManagerViewSet(viewsets.ModelViewSet):
         elif self.action in ['create', 'update', 'partial_update']:
             return HSEManagerCreateUpdateSerializer
         return HSEManagerListSerializer
+
+
+# =============================================================================
+# FONCTION UNIFIÉE POUR PRÉVISUALISER EXCEL (remplace upload_excel)
+# =============================================================================
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def upload_excel(request):
+    """
+    Prévisualiser un fichier Excel (lecture uniquement, pas d'import)
+    POST: /api/hse/upload_excel/
+    Content-Type: multipart/form-data
+    file: fichier Excel (.xlsx, .xls)
+    
+    Cette fonction trouve automatiquement la ligne d'en-tête contenant "Entité"
+    et retourne les données du fichier.
+    """
+    if 'file' not in request.FILES:
+        return Response({
+            'success': False,
+            'error': 'Aucun fichier fourni'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    excel_file = request.FILES['file']
+    
+    # Vérifier l'extension
+    if not excel_file.name.endswith(('.xlsx', '.xls')):
+        return Response({
+            'success': False,
+            'error': 'Le fichier doit être au format Excel (.xlsx ou .xls)'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        import pandas as pd
+        
+        # Lire sans header pour trouver la ligne d'en-tête
+        df_raw = pd.read_excel(excel_file, header=None)
+        
+        # Trouver la ligne contenant "Entité" (l'en-tête réelle)
+        header_row = None
+        for i, row in df_raw.iterrows():
+            if row.astype(str).str.contains("Entité", case=False, na=False).any():
+                header_row = i
+                break
+        
+        if header_row is None:
+            return Response({
+                'success': False,
+                'error': 'Impossible de trouver l\'en-tête "Entité" dans ce fichier.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Recharger le fichier en utilisant la ligne trouvée comme header
+        excel_file.seek(0)  # Réinitialiser le pointeur du fichier
+        df = pd.read_excel(excel_file, header=header_row)
+        
+        # Supprimer colonnes 'Unnamed'
+        df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
+        
+        # Supprimer lignes vides
+        df = df.dropna(how="all")
+        
+        # Reset index
+        df = df.reset_index(drop=True)
+        
+        # Convertir en liste de dictionnaires
+        data_list = df.to_dict('records')
+        
+        return Response({
+            'success': True,
+            'data': data_list,
+            'columns': list(df.columns),
+            'row_count': len(df)
+        })
+        
+    except Exception as e:
+        return Response({
+            'success': False,
+            'error': f'Erreur lors de la lecture du fichier : {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

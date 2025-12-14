@@ -8,6 +8,7 @@ from .views_api import (
     list_active_versions,
     version_questions,
     version_add_question,
+    version_update_order,
     version_detail,
     verify_cni,
     test_questions_public,
@@ -33,6 +34,7 @@ urlpatterns = [
     path('versions/<int:pk>', version_detail, name='versions-detail'),
     path('versions/<int:pk>/questions', version_questions, name='versions-questions'),
     path('versions/<int:pk>/questions/add', version_add_question, name='versions-questions-add'),
+    path('versions/<int:pk>/update-order/', version_update_order, name='versions-update-order'),
     
     # Endpoints apprenant alignés maquette
     path('test/verifier-cni', verify_cni, name='verify-cni'),

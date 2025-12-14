@@ -63,6 +63,7 @@ def hse_stats(request):
     """
     Retourne les statistiques HSE sous forme JSON
     pour le frontend React.
+    Utilise les données de la base de données (HSEUser et TestAttempt).
     """
 
     # 1️⃣ Lire la date passée dans l'URL
@@ -76,30 +77,53 @@ def hse_stats(request):
         day = today.day
         month = today.month
         year = today.year
+    else:
+        day = int(day)
+        month = int(month)
+        year = int(year)
 
-    # 3️⃣ Construire le chemin du fichier Excel
-    file_path = f"backend/data/{day}-{month}-{year}.xlsx"
-
-    if not os.path.exists(file_path):
+    try:
+        selected_date = datetime.date(year, month, day)
+    except ValueError:
         return JsonResponse({
-            "error": "Fichier du jour introuvable",
-            "file_searched": file_path
-        }, status=404)
+            "error": "Date invalide"
+        }, status=400)
 
-    # 4️⃣ Charger Excel
-    df = pd.read_excel(file_path)
-
-    # 5️⃣ Exemple de calculs
-    presence = int(df["Présence"].mean() * 100)
-    test_initial = int(df["Test initial"].mean() * 100)
-    test_final = int(df["Test final"].mean() * 100)
-
+    # 3️⃣ Importer les modèles
+    from hse_app.models import HSEUser
+    from tests.models import TestAttempt
+    
+    # 4️⃣ Calculer le pourcentage de présence pour le jour sélectionné
+    users_for_date = HSEUser.objects.filter(date_ajout=selected_date)
+    total_users = users_for_date.count()
+    present_users = users_for_date.filter(presence=True).count()
+    presence_percentage = (present_users / total_users * 100) if total_users > 0 else 0
+    
+    # 5️⃣ Calculer la moyenne des tests pour le jour sélectionné
+    attempts_for_date = TestAttempt.objects.filter(
+        completed_at__date=selected_date,
+        status__in=['passed', 'failed']
+    )
+    total_attempts = attempts_for_date.count()
+    
+    if total_attempts > 0:
+        # Calculer la moyenne des scores
+        total_score = sum(attempt.overall_score_percentage for attempt in attempts_for_date)
+        average_test_score = total_score / total_attempts
+    else:
+        average_test_score = 0
+    
     # 6️⃣ Retour JSON parfait pour React
     return JsonResponse({
-        "presence": presence,
-        "test_initial": test_initial,
-        "test_final": test_final,
-        "improvement": test_final - test_initial
+        "presence": round(presence_percentage, 2),
+        "presence_count": present_users,
+        "total_users": total_users,
+        "average_test_score": round(average_test_score, 2),
+        "total_attempts": total_attempts,
+        "test_initial": 0,  # Pour compatibilité avec l'ancien code
+        "test_final": round(average_test_score, 2),
+        "improvement": round(average_test_score, 2),
+        "date": selected_date.isoformat()
     })
 
 

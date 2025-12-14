@@ -20,13 +20,17 @@ export default function PasserTest() {
   const [submitting, setSubmitting] = useState(false);
   const [needsCin, setNeedsCin] = useState(false);
   const [cinInput, setCinInput] = useState("");
+  const [accessGranted, setAccessGranted] = useState(false); // État pour l'accès autorisé
+  const [needsLanguage, setNeedsLanguage] = useState(false);
+  const [selectedLanguage, setSelectedLanguage] = useState("fr");
+  const [cin, setCin] = useState("");
 
   const total = questions.length;
   const currentQuestion = questions[current];
 
-  // Countdown démarre uniquement après saisie/validation du CNI
+  // Countdown démarre uniquement après autorisation d'accès (accessGranted = true)
   useEffect(() => {
-    if (needsCin) return;
+    if (!accessGranted || needsCin) return;
     const timer = setInterval(() => {
       setSecondsLeft((s) => {
         if (s <= 1) {
@@ -38,7 +42,7 @@ export default function PasserTest() {
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [needsCin]);
+  }, [accessGranted, needsCin]);
 
   // Fetch questions on mount
   useEffect(() => {
@@ -46,13 +50,20 @@ export default function PasserTest() {
     const stored = cniParam || sessionStorage.getItem("cni");
     if (stored && CNI_REGEX.test(stored)) {
       sessionStorage.setItem("cni", stored.toUpperCase());
-      setSecondsLeft(TEST_DURATION_SECONDS);
-      fetchQuestions();
-      setNeedsCin(false);
+      verifyCinAndGrantAccess(stored.toUpperCase());
     } else {
       setNeedsCin(true);
     }
   }, [id, searchParams]);
+
+  const verifyCinAndGrantAccess = async (cinValue) => {
+    // Stocker le CIN
+    setCin(cinValue);
+    sessionStorage.setItem("cni", cinValue.toUpperCase());
+    // Afficher le choix de langue
+    setNeedsCin(false);
+    setNeedsLanguage(true);
+  };
 
   const handleCinSubmit = async () => {
     const value = cinInput.trim().toUpperCase();
@@ -60,19 +71,18 @@ export default function PasserTest() {
       setError("Format CNI invalide (ex: AE112456)");
       return;
     }
-    setError("");
-    try {
-      await axios.post(`${API_BASE}/api/test/verifier-cni`, { cni: value });
-    } catch (err) {
-      // on autorise quand même le passage si l'API n'est pas dispo
-    }
-    sessionStorage.setItem("cni", value);
-    setNeedsCin(false);
-    setSecondsLeft(TEST_DURATION_SECONDS);
-    fetchQuestions();
+    await verifyCinAndGrantAccess(value);
   };
 
-  const fetchQuestions = async () => {
+  const handleLanguageSelect = (lang) => {
+    setSelectedLanguage(lang);
+    setNeedsLanguage(false);
+    setAccessGranted(true);
+    setSecondsLeft(TEST_DURATION_SECONDS);
+    fetchQuestions(lang);
+  };
+
+  const fetchQuestions = async (lang = "fr") => {
     setLoading(true);
     setError("");
     try {
@@ -134,6 +144,8 @@ export default function PasserTest() {
       await axios.post(`${API_BASE}/api/test/${id}/terminer`, {
         answers,
         time_taken_seconds: TEST_DURATION_SECONDS - secondsLeft,
+        cin: cin,
+        langue: selectedLanguage,
       });
       navigate(`/test/${id}/resultat`);
     } catch (err) {
@@ -191,6 +203,33 @@ export default function PasserTest() {
             </button>
           </div>
         )}
+        {needsLanguage && (
+          <div className="space-y-3 mb-6">
+            <p className="text-sm text-gray-700 font-semibold">
+              Veuillez choisir votre langue préférée / Please choose your preferred language / يرجى اختيار لغتك المفضلة
+            </p>
+            <div className="grid grid-cols-3 gap-3">
+              <button
+                className="p-4 border-2 rounded-lg hover:bg-green-50 transition-all"
+                onClick={() => handleLanguageSelect("fr")}
+              >
+                <div className="text-lg font-semibold">Français</div>
+              </button>
+              <button
+                className="p-4 border-2 rounded-lg hover:bg-green-50 transition-all"
+                onClick={() => handleLanguageSelect("en")}
+              >
+                <div className="text-lg font-semibold">English</div>
+              </button>
+              <button
+                className="p-4 border-2 rounded-lg hover:bg-green-50 transition-all"
+                onClick={() => handleLanguageSelect("ar")}
+              >
+                <div className="text-lg font-semibold">العربية</div>
+              </button>
+            </div>
+          </div>
+        )}
         {loading && <p className="text-gray-600">Chargement des questions...</p>}
 
         {!loading && currentQuestion && (
@@ -207,13 +246,9 @@ export default function PasserTest() {
                 />
               )}
               <p className="text-lg font-semibold text-green-900">
-                {currentQuestion.enonce_fr || currentQuestion.get_enonce("fr")}
-              </p>
-              <p className="text-lg font-semibold text-green-900 mt-2">
-                {currentQuestion.enonce_ar || currentQuestion.get_enonce("ar")}
-              </p>
-              <p className="text-lg font-semibold text-green-900 mt-2">
-                {currentQuestion.enonce_en || currentQuestion.get_enonce("en")}
+                {selectedLanguage === "fr" && (currentQuestion.enonce_fr || currentQuestion.get_enonce?.("fr"))}
+                {selectedLanguage === "ar" && (currentQuestion.enonce_ar || currentQuestion.get_enonce?.("ar") || currentQuestion.enonce_fr)}
+                {selectedLanguage === "en" && (currentQuestion.enonce_en || currentQuestion.get_enonce?.("en") || currentQuestion.enonce_fr)}
               </p>
             </div>
 
