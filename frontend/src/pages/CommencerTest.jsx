@@ -1,21 +1,62 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import QRCode from "react-qr-code";
 import TopNav from "../components/TopNav";
+import { API_BASE } from "../config";
 
 export default function CommencerTest() {
   const [error, setError] = useState("");
   const navigate = useNavigate();
 
   const versionId = useMemo(() => localStorage.getItem("selectedTestVersion"), []);
-  const origin = useMemo(() => window.location.origin, []);
-  const qrValue = versionId ? `${origin}/test/${versionId}/passer` : "";
+  
+  // Construire l'URL pour le QR code - TOUJOURS utiliser l'IP locale pour que les téléphones puissent y accéder
+  const getFrontendUrl = () => {
+    // Toujours utiliser l'IP locale pour que les téléphones puissent y accéder
+    const currentPort = window.location.port;
+    const isDevMode = currentPort === '5173' || currentPort === ''; // Vite dev server ou Docker
+    
+    // Déterminer le port du frontend
+    let frontendPort = '3000'; // Port Docker par défaut
+    if (isDevMode && currentPort === '5173') {
+      frontendPort = '5173'; // Mode développement local
+    }
+    
+    // Extraire l'IP du backend ou utiliser l'IP locale par défaut
+    try {
+      const apiUrl = new URL(API_BASE);
+      const backendHost = apiUrl.hostname;
+      
+      // Si l'API utilise localhost, utiliser l'IP locale par défaut
+      if (backendHost === 'localhost' || backendHost === '127.0.0.1') {
+        return `http://10.24.159.24:${frontendPort}`;
+      }
+      // Sinon utiliser le même hostname que le backend
+      return `http://${backendHost}:${frontendPort}`;
+    } catch (e) {
+      // Fallback : utiliser l'IP locale par défaut (IP de la machine)
+      return `http://10.24.159.24:${frontendPort}`;
+    }
+  };
+  
+  const frontendUrl = useMemo(() => getFrontendUrl(), []);
+  const qrValue = versionId ? `${frontendUrl}/test/${versionId}/passer` : "";
+  
+  // Afficher l'URL dans la console pour déboguer
+  useEffect(() => {
+    if (qrValue) {
+      console.log('🔗 QR Code URL générée:', qrValue);
+      console.log('📱 Testez cette URL sur votre téléphone:', qrValue);
+      console.log('💡 Assurez-vous que votre téléphone est sur le même réseau Wi-Fi');
+    }
+  }, [qrValue]);
 
   const handleStartHere = () => {
     if (!versionId) {
       setError("Veuillez d'abord sélectionner une version de test.");
       return;
     }
+    console.log("Navigation vers le test avec ID:", versionId);
     navigate(`/test/${versionId}/passer`);
   };
 
@@ -48,7 +89,17 @@ export default function CommencerTest() {
               <div className="flex justify-center">
                 <QRCode value={qrValue} size={180} />
               </div>
-              <p className="text-xs text-gray-600 mt-2 break-words">{qrValue}</p>
+              <p className="text-xs text-gray-600 mt-2 break-words font-mono">{qrValue}</p>
+              <p className="text-xs text-blue-600 mt-2">
+                ⚠️ Assurez-vous que votre téléphone est sur le même réseau Wi-Fi
+              </p>
+            </div>
+          )}
+          {!qrValue && (
+            <div className="border rounded-lg p-4 text-center bg-yellow-50">
+              <p className="text-yellow-800 text-sm">
+                ⚠️ Aucune version sélectionnée. Veuillez d'abord sélectionner une version de test.
+              </p>
             </div>
           )}
         </div>

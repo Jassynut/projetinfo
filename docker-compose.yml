@@ -1,0 +1,86 @@
+services:
+  # MySQL Database
+  db:
+    image: mysql:8.0
+    container_name: mysql_db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: hse_database
+      MYSQL_ROOT_PASSWORD: root
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./reset_hse_tables.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "3307:3306"  # Port externe 3307 pour éviter les conflits avec MySQL local
+    networks:
+      - hse_network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Django Backend
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: hse_backend
+    restart: unless-stopped
+    volumes:
+      - .:/app
+      - backend_static:/app/static
+      - backend_media:/app/media
+      - questions_data:/app/questions
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=${DEBUG:-True}
+      - SECRET_KEY=${SECRET_KEY:-django-insecure-w2(c2(oo-ad&=878nqa2)5f884t^4jj&je^-4rw+503l4-9p!f}
+      - DATABASE_NAME=${DATABASE_NAME:-hse_database}
+      - DATABASE_USER=${DATABASE_USER:-root}
+      - DATABASE_PASSWORD=${DATABASE_PASSWORD:-root}
+      - DATABASE_HOST=db
+      - DATABASE_PORT=3306
+      - ALLOWED_HOSTS=localhost,127.0.0.1,10.24.159.24,*
+      - FRONTEND_URL=${FRONTEND_URL:-http://10.24.159.24:3000}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - hse_network
+
+  # React Frontend
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://10.24.159.24:8000}
+    container_name: hse_frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - hse_network
+    # Note: IP locale configurée pour permettre l'accès depuis d'autres appareils via QR code
+
+volumes:
+  db_data:
+    driver: local
+  backend_static:
+    driver: local
+  backend_media:
+    driver: local
+  questions_data:
+    driver: local
+
+networks:
+  hse_network:
+    driver: bridge
+

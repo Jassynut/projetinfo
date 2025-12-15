@@ -570,13 +570,25 @@ def test_finish_public(request, test_id):
     # Créer ou récupérer TestUser si CIN fourni
     test_user = None
     attempt = None
+    error_message = None
+    
     if cin:
         try:
+            # Vérifier que le CIN existe dans HSEUser
+            try:
+                hse_user = HSEUser.objects.get(cin=cin)
+            except HSEUser.DoesNotExist:
+                return Response({
+                    'success': False,
+                    'error': f'CIN {cin} non trouvé dans la base de données. Veuillez contacter l\'administrateur.'
+                }, status=404)
+            
+            # Créer ou récupérer TestUser
             test_user, created = TestUser.objects.get_or_create(
                 cin=cin,
                 defaults={
                     'username': f"user_{cin}",
-                    'full_name': f"User {cin}",
+                    'full_name': hse_user.full_name or f"User {cin}",
                     'user_type': 'user'
                 }
             )
@@ -602,11 +614,8 @@ def test_finish_public(request, test_id):
             
             # Mettre à jour sensibilise_avec_succes dans HSEUser
             try:
-                hse_user = HSEUser.objects.get(cin=cin)
                 hse_user.sensibilise_avec_succes = passed
                 hse_user.save(update_fields=['sensibilise_avec_succes'])
-            except HSEUser.DoesNotExist:
-                pass
             except Exception as e:
                 import logging
                 logger = logging.getLogger(__name__)
@@ -615,6 +624,9 @@ def test_finish_public(request, test_id):
             import logging
             logger = logging.getLogger(__name__)
             logger.error(f"Erreur création TestAttempt: {str(e)}")
+            error_message = f"Erreur lors de l'enregistrement: {str(e)}"
+    else:
+        error_message = "CIN non fourni. Impossible d'enregistrer le test."
     
     # Stocker aussi dans le cache pour compatibilité
     cache.set(f"test_result:{request.session.session_key}:{test_id}", {
@@ -627,15 +639,33 @@ def test_finish_public(request, test_id):
     }, 60 * 30)
     cache.delete(cache_key)
 
+    # Retourner la réponse
+    if error_message:
+        return Response({
+            'success': False,
+            'error': error_message
+        }, status=400)
+    
+    if not attempt:
+        return Response({
+            'success': False,
+            'error': 'Impossible de créer l\'enregistrement du test. CIN non trouvé.'
+        }, status=400)
+    
     return Response({
         'success': True,
         'score': total_score,
         'mandatory_correct': mandatory_correct,
         'optional_correct': optional_correct,
         'total_questions': test.total_questions,
+        'mandatory_total': total_mandatory,
+        'optional_total': total_optional,
         'overall_score_percentage': round(overall_score_percentage, 2),
+        'mandatory_score_percentage': round(mandatory_score_percentage, 2),
+        'optional_score_percentage': round(optional_score_percentage, 2),
         'passed': passed,
-        'attempt_id': attempt.id if attempt else None
+        'attempt_id': attempt.id,
+        'message': 'Test enregistré avec succès'
     })
 
 

@@ -20,7 +20,7 @@ def search_hse_user_by_cin(request):
     GET: /api/hse/users/search/?cin=AB123456
     Note: Pas de @login_required car utilisé pour vérifier le CIN avant authentification
     """
-    cin = request.GET.get('cin', '').strip().upper()
+    cin = request.GET.get('cin', '').strip().upper().replace(' ', '')
     
     if not cin:
         return JsonResponse({
@@ -29,7 +29,10 @@ def search_hse_user_by_cin(request):
         }, status=400)
     
     try:
-        user = HSEUser.objects.get(cin=cin)
+        # Recherche insensible à la casse (iexact)
+        # Normaliser le CIN en supprimant les espaces
+        cin_normalized = cin.replace(' ', '').replace('-', '').replace('_', '')
+        user = HSEUser.objects.get(cin__iexact=cin_normalized)
         
         # Récupérer les tentatives de test (optionnel, seulement si authentifié)
         attempts_data = []
@@ -534,6 +537,11 @@ def start_hse_test_attempt(request):
                 is_mandatory = str(question.id) in [str(qid) for qid in test.mandatory_questions]
                 
                 # Pour le test, on ne montre pas la réponse correcte
+                # Construire l'URL complète de l'image
+                image_url = None
+                if question.image:
+                    image_url = request.build_absolute_uri(question.image.url)
+                
                 question_display = {
                     'id': question.id,
                     'question_code': question.question_code,
@@ -541,7 +549,7 @@ def start_hse_test_attempt(request):
                     'is_mandatory': is_mandatory,
                     'points': question.points,
                     'has_image': question.has_image,
-                    'image_url': question.image.url if question.image else None
+                    'image_url': image_url
                 }
                 questions_data.append(question_display)
             
@@ -728,13 +736,13 @@ def list_hse_managers(request):
             'error': 'Accès non autorisé'
         }, status=403)
     
-    managers = HSEManager.objects.all().order_by('name')
+    managers = HSEManager.objects.all().order_by('full_name')
     
     managers_data = []
     for manager in managers:
         managers_data.append({
             'id': manager.id,
-            'name': manager.name,
+            'full_name': manager.full_name,
             'cin': manager.cin,
         })
     

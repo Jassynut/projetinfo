@@ -2,8 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 import TopNav from "../components/TopNav";
-
-const API_BASE = "http://127.0.0.1:8000";
+import { API_BASE } from "../config";
 
 export default function ModifierVersion() {
   const { versionId } = useParams();
@@ -237,7 +236,11 @@ export default function ModifierVersion() {
     } catch (err) {
       console.error("Erreur ajout:", err);
       console.error("Détails:", err.response?.data);
-      alert(`Erreur lors de l'ajout de la question: ${err.response?.data?.error || err.message}`);
+      const errorMsg = err.response?.data?.error || err.message || "Erreur de connexion au serveur";
+      const fullError = err.code === 'ERR_NETWORK' || err.code === 'ERR_CONNECTION_REFUSED'
+        ? `Impossible de se connecter au serveur. Vérifiez que le backend est accessible à ${API_BASE}`
+        : errorMsg;
+      alert(`Erreur lors de l'ajout de la question: ${fullError}`);
     }
   };
 

@@ -3,6 +3,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 import json
+import os
 import qrcode
 import io
 import base64
@@ -97,6 +98,10 @@ def manager_generate_test_qr(request, test_id):
                 test_title = f"Test #{test_id}"
                 test_duration = 30
 
+            # Construire l'URL du frontend pour le QR code
+            # Utiliser l'IP locale depuis les settings ou l'environnement
+            frontend_url = os.getenv('FRONTEND_URL', 'http://10.24.159.19:3000')
+            
             # Données à encoder dans le QR
             qr_payload = {
                 'test_id': test_id,
@@ -104,8 +109,8 @@ def manager_generate_test_qr(request, test_id):
                 'action': 'access_test',
                 'generated_at': datetime.now().isoformat(),
                 'generated_by': request.user.full_name,
-                'url': f"http://10.26.31.10:5173/qr-login/{test_id}"
-} 
+                'url': f"{frontend_url}/test/{test_id}/passer"
+            } 
 
             # Convertir en JSON
             qr_string = json.dumps(qr_payload)

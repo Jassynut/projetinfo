@@ -282,7 +282,7 @@ class HSEManagerListSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = HSEManager
-        fields = ['id', 'name', 'cin']
+        fields = ['id', 'full_name', 'cin']
 
 
 class HSEManagerDetailSerializer(serializers.ModelSerializer):
@@ -291,7 +291,7 @@ class HSEManagerDetailSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = HSEManager
-        fields = ['id', 'name', 'cin', 'managed_users_count']
+        fields = ['id', 'full_name', 'cin', 'managed_users_count']
     
     def get_managed_users_count(self, obj):
         return HSEUser.objects.count()  # À adapter selon votre logique
@@ -302,4 +302,9 @@ class HSEManagerCreateUpdateSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = HSEManager
-        fields = ['name', 'cin']
+        fields = ['full_name', 'cin']
+    
+    def validate_cin(self, value):
+        if not value or len(value) < 3:
+            raise serializers.ValidationError("CIN invalide")
+        return value.upper()

@@ -13,6 +13,7 @@ import SelectionTest from "./pages/SelectionTest";
 import CommencerTest from "./pages/CommencerTest";
 import PasserTest from "./pages/PasserTest";
 import ResultatTest from "./pages/ResultatTest";
+import GestionAdmins from "./pages/GestionAdmins";
 
 export default function App() {
   return (
@@ -27,6 +28,7 @@ export default function App() {
         <Route path="/modifier-version/:versionId" element={<ModifierVersion />} />
         <Route path="/gerer-questions" element={<GestionQuestions />} />
         <Route path="/certificats" element={<ConsultationCertificats />} />
+        <Route path="/gerer-admins" element={<GestionAdmins />} />
         <Route path="/test/selection" element={<SelectionTest />} />
         <Route path="/test/commencer" element={<CommencerTest />} />
         <Route path="/test/:id/passer" element={<PasserTest />} />

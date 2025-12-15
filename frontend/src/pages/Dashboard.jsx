@@ -68,14 +68,15 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* CARD 5 LARGE */}
+        {/* CARD 5 - Rechercher/Consulter les certificats */}
         <div
           onClick={() => navigate("/certificats")}
           className="cursor-pointer bg-white rounded-xl shadow-lg p-8 border border-green-200 hover:shadow-xl transition text-center md:col-span-2">
-          <h2 className="text-green-700 text-xl font-semibold mb-5">Générer un certificat</h2>
+          <h2 className="text-green-700 text-xl font-semibold mb-5">Rechercher un certificat</h2>
           <div className="w-24 h-24 mx-auto flex items-center justify-center">
             <img src="/certificate.png" className="max-w-full max-h-full object-contain" />
           </div>
+          <p className="text-sm text-gray-600 mt-3">Consulter et télécharger</p>
         </div>
 
       </div>

@@ -2,7 +2,7 @@ import { useState } from "react";
 import axios from "axios";
 import TopNav from "../components/TopNav";
 
-const API_BASE = "http://127.0.0.1:8000";
+import { API_BASE } from "../config";
 
 export default function ConsultationCertificats() {
   const [cni, setCni] = useState("");
@@ -25,23 +25,33 @@ export default function ConsultationCertificats() {
     try {
       const res = await axios.post(`${API_BASE}/api/certificats/recherche/`, {
         cni: value,
+      }, {
+        headers: {
+          'Content-Type': 'application/json',
+        },
       });
       
       if (res.data.success) {
         setUserInfo(res.data.user_info);
         setCertificats(res.data.certificats || []);
         
-        if (res.data.certificats.length === 0) {
+        if (!res.data.certificats || res.data.certificats.length === 0) {
           setError("Aucun certificat trouvé pour cet apprenant.");
         }
       } else {
         setError(res.data.error || "Erreur de recherche");
       }
     } catch (err) {
+      console.error("Erreur recherche certificat:", err);
       if (err.response?.status === 404) {
-        setError("Aucun apprenant trouvé avec ce CNI.");
+        setError(err.response?.data?.error || "Aucun apprenant trouvé avec ce CNI.");
+      } else if (err.response?.status === 403) {
+        setError(err.response?.data?.error || "Cet utilisateur n'a pas été sensibilisé avec succès. Impossible de générer un certificat.");
+      } else if (err.response?.status === 400) {
+        setError(err.response?.data?.error || "CNI requis ou invalide.");
       } else {
-        setError("Erreur lors de la recherche. Vérifiez votre connexion.");
+        const errorMsg = err.response?.data?.error || err.message || "Erreur lors de la recherche. Vérifiez votre connexion.";
+        setError(errorMsg);
       }
     } finally {
       setLoading(false);

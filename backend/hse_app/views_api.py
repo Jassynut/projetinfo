@@ -146,7 +146,10 @@ class HSEUserViewSet(viewsets.ModelViewSet):
             }, status=status.HTTP_400_BAD_REQUEST)
         
         try:
-            user = HSEUser.objects.get(cin=cin)
+            # Normaliser le CIN en supprimant les espaces et caractères spéciaux
+            cin_normalized = cin.replace(' ', '').replace('-', '').replace('_', '')
+            # Recherche insensible à la casse
+            user = HSEUser.objects.get(cin__iexact=cin_normalized)
             serializer = HSEUserDetailSerializer(user)
             return Response({
                 'success': True,
@@ -193,7 +196,19 @@ class HSEManagerViewSet(viewsets.ModelViewSet):
     """
     
     queryset = HSEManager.objects.all()
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]  # Par défaut, permettre l'accès
+    
+    def get_permissions(self):
+        """
+        Permettre toutes les opérations sans auth pour le développement
+        En production, vous devriez exiger l'authentification pour les modifications
+        """
+        # Pour le développement, permettre tout sans authentification
+        # TODO: En production, décommenter les lignes suivantes pour sécuriser
+        # if self.action in ['list', 'retrieve']:
+        #     return [permissions.AllowAny()]
+        # return [permissions.IsAuthenticated()]
+        return [permissions.AllowAny()]  # Temporaire pour le développement
     
     def get_serializer_class(self):
         if self.action == 'retrieve':

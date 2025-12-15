@@ -2,8 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import axios from "axios";
 import TopNav from "../components/TopNav";
-
-const API_BASE = "http://127.0.0.1:8000";
+import { API_BASE } from "../config";
 const TEST_DURATION_SECONDS = 600; // 10 minutes
 const CNI_REGEX = /^[A-Z]{1,2}\d{5,6}$/i;
 
@@ -11,6 +10,8 @@ export default function PasserTest() {
   const { id } = useParams(); // test id or version
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  
+  // Tous les useState d'abord
   const [questions, setQuestions] = useState([]);
   const [answers, setAnswers] = useState({});
   const [current, setCurrent] = useState(0);
@@ -24,6 +25,14 @@ export default function PasserTest() {
   const [needsLanguage, setNeedsLanguage] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState("fr");
   const [cin, setCin] = useState("");
+
+  // Log pour déboguer
+  useEffect(() => {
+    console.log("PasserTest - ID récupéré depuis les paramètres:", id);
+    if (!id) {
+      console.error("PasserTest - ERREUR: ID manquant dans les paramètres de route");
+    }
+  }, [id]);
 
   const total = questions.length;
   const currentQuestion = questions[current];
@@ -46,6 +55,12 @@ export default function PasserTest() {
 
   // Fetch questions on mount
   useEffect(() => {
+    // Vérifier que l'ID du test est valide
+    if (!id) {
+      setError("ID du test manquant. Veuillez sélectionner une version de test.");
+      return;
+    }
+    
     const cniParam = searchParams.get("cni");
     const stored = cniParam || sessionStorage.getItem("cni");
     if (stored && CNI_REGEX.test(stored)) {
@@ -57,12 +72,33 @@ export default function PasserTest() {
   }, [id, searchParams]);
 
   const verifyCinAndGrantAccess = async (cinValue) => {
-    // Stocker le CIN
-    setCin(cinValue);
-    sessionStorage.setItem("cni", cinValue.toUpperCase());
-    // Afficher le choix de langue
-    setNeedsCin(false);
-    setNeedsLanguage(true);
+    setLoading(true);
+    setError("");
+    
+    try {
+      // Vérifier que le CIN existe dans la table HSEUser
+      const response = await axios.get(`${API_BASE}/api/hse/users/search/`, {
+        params: { cin: cinValue.toUpperCase() }
+      });
+
+      if (response.data.success && response.data.user) {
+        // CIN trouvé dans HSEUser → accès autorisé
+        setCin(cinValue.toUpperCase());
+        sessionStorage.setItem("cni", cinValue.toUpperCase());
+        setNeedsCin(false);
+        setNeedsLanguage(true);
+      } else {
+        setError("CIN non trouvé dans la base de données. Vérifiez votre numéro.");
+      }
+    } catch (err) {
+      console.error("Erreur vérification CIN:", err);
+      setError(
+        err.response?.data?.error || 
+        "CIN non trouvé dans la base de données. Vérifiez votre numéro."
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleCinSubmit = async () => {
@@ -83,14 +119,25 @@ export default function PasserTest() {
   };
 
   const fetchQuestions = async (lang = "fr") => {
+    if (!id) {
+      setError("ID du test manquant. Veuillez sélectionner une version de test.");
+      return;
+    }
+    
     setLoading(true);
     setError("");
     try {
       const res = await axios.get(`${API_BASE}/api/test/${id}/questions`);
       const items = res.data?.questions || res.data || [];
-      setQuestions(items);
+      if (items.length === 0) {
+        setError("Aucune question trouvée pour ce test.");
+      } else {
+        setQuestions(items);
+      }
     } catch (err) {
-      setError("Impossible de charger les questions.");
+      console.error("Erreur chargement questions:", err);
+      const errorMsg = err.response?.data?.error || err.response?.data?.detail || "Impossible de charger les questions.";
+      setError(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -138,22 +185,64 @@ export default function PasserTest() {
       setError("Merci de répondre à toutes les questions avant de terminer.");
       return;
     }
+    
+    // Récupérer le CIN depuis l'état ou sessionStorage
+    const currentCin = cin || sessionStorage.getItem("cni") || "";
+    if (!currentCin) {
+      setError("CIN non trouvé. Veuillez recommencer le test.");
+      return;
+    }
+    
     setSubmitting(true);
     setError("");
     try {
-      await axios.post(`${API_BASE}/api/test/${id}/terminer`, {
+      const response = await axios.post(`${API_BASE}/api/test/${id}/terminer`, {
         answers,
         time_taken_seconds: TEST_DURATION_SECONDS - secondsLeft,
-        cin: cin,
+        cin: currentCin.toUpperCase(),
         langue: selectedLanguage,
       });
-      navigate(`/test/${id}/resultat`);
+      
+      // Vérifier que l'attempt a été créé
+      if (response.data?.success && response.data?.attempt_id) {
+        navigate(`/test/${id}/resultat`);
+      } else if (response.data?.success) {
+        // Attempt créé mais pas d'ID retourné (peut arriver)
+        navigate(`/test/${id}/resultat`);
+      } else {
+        setError(response.data?.error || "Erreur lors de l'enregistrement du test.");
+      }
     } catch (err) {
-      setError("Erreur lors de la soumission du test.");
+      console.error("Erreur soumission test:", err);
+      const errorMsg = err.response?.data?.error || err.response?.data?.message || "Erreur lors de la soumission du test.";
+      setError(errorMsg);
     } finally {
       setSubmitting(false);
     }
   };
+
+  // Vérifier que l'ID est présent
+  if (!id) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-green-50 to-green-300 p-4 md:p-8">
+        <div className="max-w-5xl mx-auto bg-white rounded-xl shadow-lg border border-green-200 p-6">
+          <TopNav className="mb-4" />
+          <div className="text-center py-8">
+            <h1 className="text-xl font-bold text-red-600 mb-4">Erreur</h1>
+            <p className="text-gray-700 mb-4">
+              ID du test manquant. Veuillez sélectionner une version de test depuis la page de sélection.
+            </p>
+            <button
+              onClick={() => navigate("/test/selection")}
+              className="bg-green-700 text-white px-6 py-3 rounded-lg shadow hover:bg-green-800"
+            >
+              Retour à la sélection
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-green-300 p-4 md:p-8">
@@ -240,9 +329,15 @@ export default function PasserTest() {
             <div className="border rounded-xl p-4 shadow-sm bg-green-50">
               {currentQuestion.image_url && (
                 <img
-                  src={currentQuestion.image_url}
+                  src={currentQuestion.image_url.startsWith('http') 
+                    ? currentQuestion.image_url 
+                    : `${API_BASE}${currentQuestion.image_url}`}
                   alt="illustration"
                   className="w-full max-h-64 object-contain rounded mb-4"
+                  onError={(e) => {
+                    console.error("Erreur chargement image:", currentQuestion.image_url);
+                    e.target.style.display = 'none';
+                  }}
                 />
               )}
               <p className="text-lg font-semibold text-green-900">

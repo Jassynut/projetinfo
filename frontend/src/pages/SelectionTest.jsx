@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import TopNav from "../components/TopNav";
 
-const API_BASE = "http://127.0.0.1:8000";
+import { API_BASE } from "../config";
 
 export default function SelectionTest() {
   const [versions, setVersions] = useState([]);
@@ -34,7 +34,16 @@ export default function SelectionTest() {
       setError("Veuillez sélectionner une version.");
       return;
     }
-    localStorage.setItem("selectedTestVersion", selected.id || selected.version || "");
+    // S'assurer qu'on a un ID valide
+    const testId = selected.id || selected.version || selected.test_id;
+    if (!testId) {
+      setError("Erreur: ID du test manquant. Veuillez réessayer.");
+      console.error("Version sélectionnée sans ID:", selected);
+      return;
+    }
+    console.log("Version sélectionnée:", selected);
+    console.log("ID du test sauvegardé:", testId);
+    localStorage.setItem("selectedTestVersion", String(testId));
     navigate("/test/commencer");
   };
 

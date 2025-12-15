@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import TopNav from "../components/TopNav";
+import { API_BASE } from "../config";
 
 export default function DashboardHSE() {
   const [presence, setPresence] = useState(null);
@@ -16,7 +17,7 @@ export default function DashboardHSE() {
   // Fonction pour récupérer données du backend
   const fetchData = async (d = "", m = "", y = "") => {
     try {
-      const response = await axios.get("http://127.0.0.1:8000/stats/hse/stats/", {
+      const response = await axios.get(`${API_BASE}/stats/hse/stats/`, {
         params: { day: d, month: m, year: y }
       });
 

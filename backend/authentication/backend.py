@@ -25,13 +25,29 @@ class AdminBackend(BaseBackend):
 
 
 class HSEUserBackend(BaseBackend):
-    """Authentification des utilisateurs HSE via CIN uniquement."""
+    """Authentification des utilisateurs HSE via CIN uniquement depuis la table HSEUser."""
 
     def authenticate(self, request, cin=None, **kwargs):
         if cin is None:
             return None
         try:
-            user, _created = TestUser.objects.authenticate_hse_user(cin)
+            from hse_app.models import HSEUser
+            # Vérifier que le CIN existe dans la table HSEUser
+            hse_user = HSEUser.objects.get(cin=cin.strip().upper())
+            # Créer ou récupérer le TestUser correspondant pour la session Django
+            user, _created = TestUser.objects.get_or_create(
+                cin=hse_user.cin,
+                user_type='user',
+                defaults={
+                    'username': f"user_{hse_user.cin}",
+                    'full_name': hse_user.get_full_name(),
+                    'is_staff': False
+                }
+            )
+            # Mettre à jour le nom complet si nécessaire
+            if not _created and user.full_name != hse_user.get_full_name():
+                user.full_name = hse_user.get_full_name()
+                user.save()
             return user
         except Exception:
             return None
@@ -44,13 +60,36 @@ class HSEUserBackend(BaseBackend):
 
 
 class HSEManagerBackend(BaseBackend):
-    """Authentification des managers HSE via nom complet + CIN."""
+    """Authentification des managers HSE via nom complet + CIN depuis la table HSEManager."""
 
     def authenticate(self, request, full_name=None, cin=None, **kwargs):
         if not full_name or not cin:
             return None
         try:
-            return TestUser.objects.authenticate_manager(full_name, cin)
+            from hse_app.models import HSEManager
+            # Vérifier dans la table HSEManager directement
+            manager = HSEManager.objects.get(
+                full_name__iexact=full_name.strip(),
+                cin=cin.strip().upper()
+            )
+            # Créer ou récupérer le TestUser correspondant pour la session Django
+            user, _created = TestUser.objects.get_or_create(
+                cin=manager.cin,
+                user_type='manager',
+                defaults={
+                    'username': manager.full_name.lower().replace(' ', '_'),
+                    'full_name': manager.full_name,
+                    'is_staff': True
+                }
+            )
+            # Mettre à jour le mot de passe avec le CIN
+            if not user.has_usable_password() or _created:
+                user.set_password(manager.cin)
+                user.save()
+            # Vérifier que le mot de passe correspond au CIN
+            if user.check_password(manager.cin):
+                return user
+            return None
         except Exception:
             return None
 
