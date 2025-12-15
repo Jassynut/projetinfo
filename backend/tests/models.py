@@ -228,9 +228,10 @@ class Question(models.Model):
         # Si c'est une chaîne "true"/"false" (venant du frontend)
         if isinstance(user_answer, str):
             user_answer = user_answer.lower().strip()
-            if user_answer in ['true', 'vrai', '1', 'yes', 'oui', 't']:
+            # Gérer les réponses en français, anglais et arabe
+            if user_answer in ['true', 'vrai', '1', 'yes', 'oui', 't', 'نعم']:
                 user_bool = True
-            elif user_answer in ['false', 'faux', '0', 'no', 'non', 'f']:
+            elif user_answer in ['false', 'faux', '0', 'no', 'non', 'f', 'لا']:
                 user_bool = False
             else:
                 return False
@@ -352,7 +353,7 @@ class TestAttempt(models.Model):
     user_answers = models.JSONField(
         verbose_name="Réponses de l'utilisateur",
         default=dict,
-        help_text="Format: {question_id: {'answer': bool, 'is_mandatory': bool}}"
+        help_text="Format: {question_id: {'answer': bool, 'answer_text': str (dans la langue choisie), 'langue': str}}"
     )
 
     class Meta:

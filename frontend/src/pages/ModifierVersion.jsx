@@ -353,9 +353,19 @@ export default function ModifierVersion() {
 
         {/* Liste des questions */}
         <div className="mb-6">
-          <h2 className="text-xl font-semibold text-green-800 mb-4">Questions de la version</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold text-green-800">Questions de la version ({questions.length})</h2>
+            {questions.length > 0 && (
+              <p className="text-sm text-gray-600">
+                💡 Glissez-déposez les questions pour modifier l'ordre
+              </p>
+            )}
+          </div>
           {questions.length === 0 ? (
-            <p className="text-gray-500">Aucune question dans cette version.</p>
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-yellow-800">
+              <p className="font-semibold mb-1">⚠️ Aucune question dans cette version</p>
+              <p className="text-sm">Les questions seront automatiquement ajoutées lors de la création. Si cette version existe déjà, veuillez ajouter des questions manuellement ci-dessous.</p>
+            </div>
           ) : (
             <div className="space-y-2">
               {questions.map((question, index) => (
@@ -372,9 +382,9 @@ export default function ModifierVersion() {
                 >
                   <div className="flex items-center gap-3 flex-1">
                     <span className="font-semibold text-green-700 w-8">⋮⋮</span>
-                    <span className="font-semibold text-green-700 w-8">{index + 1}.</span>
+                    <span className="font-semibold text-green-700 w-12">{question.question_code || `Q${question.id}`}</span>
                     <span className="flex-1">
-                      {question.question_code || `Q${index + 1}`}: {question.enonce_fr || question.text || "Question sans texte"}
+                      {question.enonce_fr || question.text || "Question sans texte"}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">

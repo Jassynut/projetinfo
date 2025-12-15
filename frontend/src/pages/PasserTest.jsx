@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import axios from "axios";
-import TopNav from "../components/TopNav";
+import TopNavLearnerLearner from "../components/TopNavLearnerLearner";
 import { API_BASE } from "../config";
 const TEST_DURATION_SECONDS = 600; // 10 minutes
 const CNI_REGEX = /^[A-Z]{1,2}\d{5,6}$/i;
@@ -52,6 +52,14 @@ export default function PasserTest() {
     }, 1000);
     return () => clearInterval(timer);
   }, [accessGranted, needsCin]);
+
+  // Marquer l'utilisateur comme apprenant (accès limité) et stocker l'ID du test
+  useEffect(() => {
+    sessionStorage.setItem("isLearner", "true");
+    if (id) {
+      sessionStorage.setItem("currentTestId", id);
+    }
+  }, [id]);
 
   // Fetch questions on mount
   useEffect(() => {
@@ -149,6 +157,22 @@ export default function PasserTest() {
     return Math.round((answered / total) * 100);
   }, [answers, total]);
 
+  // Fonction pour obtenir le texte des boutons selon la langue
+  const getAnswerButtonText = (isYes) => {
+    if (selectedLanguage === "ar") {
+      return isYes ? "نعم" : "لا";
+    } else if (selectedLanguage === "en") {
+      return isYes ? "Yes" : "No";
+    } else {
+      return isYes ? "Oui" : "Non";
+    }
+  };
+
+  // Vérifier si toutes les questions sont répondues
+  const allQuestionsAnswered = useMemo(() => {
+    return total > 0 && Object.keys(answers).length === total;
+  }, [answers, total]);
+
   const formatTime = (s) => {
     const m = Math.floor(s / 60)
       .toString()
@@ -226,17 +250,21 @@ export default function PasserTest() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-green-50 to-green-300 p-4 md:p-8">
         <div className="max-w-5xl mx-auto bg-white rounded-xl shadow-lg border border-green-200 p-6">
-          <TopNav className="mb-4" />
+          <TopNavLearner className="mb-4" />
           <div className="text-center py-8">
             <h1 className="text-xl font-bold text-red-600 mb-4">Erreur</h1>
             <p className="text-gray-700 mb-4">
               ID du test manquant. Veuillez sélectionner une version de test depuis la page de sélection.
             </p>
             <button
-              onClick={() => navigate("/test/selection")}
+              onClick={() => {
+                // Pour les apprenants, on ne peut pas retourner à la sélection
+                // On reste sur la page de test
+                window.location.reload();
+              }}
               className="bg-green-700 text-white px-6 py-3 rounded-lg shadow hover:bg-green-800"
             >
-              Retour à la sélection
+              Recharger la page
             </button>
           </div>
         </div>
@@ -247,7 +275,7 @@ export default function PasserTest() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-green-300 p-4 md:p-8">
       <div className="max-w-5xl mx-auto bg-white rounded-xl shadow-lg border border-green-200 p-6">
-        <TopNav className="mb-4" />
+        <TopNavLearnerLearner className="mb-4" />
         <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
           <div>
             <h1 className="text-xl font-bold text-green-900">Test HSE</h1>
@@ -324,7 +352,7 @@ export default function PasserTest() {
         {!loading && currentQuestion && (
           <div className="space-y-4">
             <div className="text-sm text-gray-600">
-              Question {current + 1} / {total}
+              {currentQuestion?.question_code || `Question ${current + 1}`} / {total}
             </div>
             <div className="border rounded-xl p-4 shadow-sm bg-green-50">
               {currentQuestion.image_url && (
@@ -356,7 +384,7 @@ export default function PasserTest() {
                 }`}
                 onClick={() => handleAnswer(true)}
               >
-                Oui
+                {getAnswerButtonText(true)}
               </button>
               <button
                 className={`flex-1 py-3 rounded-lg border ${
@@ -366,7 +394,7 @@ export default function PasserTest() {
                 }`}
                 onClick={() => handleAnswer(false)}
               >
-                Non
+                {getAnswerButtonText(false)}
               </button>
             </div>
 
@@ -376,7 +404,7 @@ export default function PasserTest() {
                 onClick={handlePrev}
                 disabled={current === 0}
               >
-                Précédent
+                {selectedLanguage === "ar" ? "السابق" : selectedLanguage === "en" ? "Previous" : "Précédent"}
               </button>
               <div className="flex gap-3">
                 <button
@@ -384,15 +412,18 @@ export default function PasserTest() {
                   onClick={handleNext}
                   disabled={current >= total - 1}
                 >
-                  Suivant
+                  {selectedLanguage === "ar" ? "التالي" : selectedLanguage === "en" ? "Next" : "Suivant"}
                 </button>
-                <button
-                  className="px-4 py-2 rounded-lg bg-green-700 text-white"
-                  onClick={handleSubmit}
-                  disabled={submitting}
-                >
-                  Terminer le test
-                </button>
+                {/* Afficher le bouton "Terminer le test" uniquement si toutes les questions sont répondues */}
+                {allQuestionsAnswered && (
+                  <button
+                    className="px-4 py-2 rounded-lg bg-green-700 text-white"
+                    onClick={handleSubmit}
+                    disabled={submitting}
+                  >
+                    {selectedLanguage === "ar" ? "إنهاء الاختبار" : selectedLanguage === "en" ? "Finish test" : "Terminer le test"}
+                  </button>
+                )}
               </div>
             </div>
           </div>

@@ -287,28 +287,47 @@ def list_versions(request):
                 'error': f'Version invalide. La version doit être un nombre entier positif (>= 1). Vous avez fourni : {version}'
             }, status=400)
         try:
+            # Récupérer toutes les questions actives de la base de données
+            all_active_questions = Question.objects.filter(is_active=True).order_by('question_code')
+            question_ids = [q.id for q in all_active_questions]
+            
+            # Déterminer les questions obligatoires (celles avec is_mandatory=True)
+            mandatory_question_ids = [q.id for q in all_active_questions if q.is_mandatory]
+            
+            # Si aucune question n'est marquée comme obligatoire, prendre les 9 premières par défaut
+            if not mandatory_question_ids and len(question_ids) >= 9:
+                mandatory_question_ids = question_ids[:9]
+            elif not mandatory_question_ids:
+                mandatory_question_ids = question_ids  # Prendre toutes les questions si moins de 9
+            
             test = Test.objects.create(
                 version=version,
                 description=description,
-                ordre_questions=[],
-                mandatory_questions=[],
-                total_questions=0,  # Sera mis à jour automatiquement selon ordre_questions
-                mandatory_questions_count=9,
+                ordre_questions=question_ids,  # Toutes les questions actives par défaut
+                mandatory_questions=mandatory_question_ids,  # Questions obligatoires
+                total_questions=len(question_ids),  # Nombre total de questions
+                mandatory_questions_count=len(mandatory_question_ids),
                 is_active=True,
             )
         except IntegrityError as exc:
             return Response({'success': False, 'error': str(exc)}, status=400)
         except Exception as exc:
             return Response({'success': False, 'error': str(exc)}, status=500)
+        # Forcer le recalcul de questions_count
+        test.refresh_from_db()
+        
         return Response(
             {
                 'success': True,
+                'message': f'Version {test.version} créée avec {len(question_ids)} question(s) ajoutée(s) automatiquement',
                 'version': {
                     'id': test.id,
                     'version': test.version,
                     'description': test.description,
                     'name': f"Version {test.version}",
                     'total_questions': test.total_questions,
+                    'questions_count': test.questions_count,  # Inclure questions_count
+                    'ordre_questions': test.ordre_questions,  # Inclure ordre_questions pour référence
                     'created_at': test.created_at,
                 },
             },
@@ -328,6 +347,13 @@ def list_versions(request):
             try:
                 item = TestListSerializer(t).data
                 item['name'] = f"Version {t.version}"
+                # Calculer questions_count depuis ordre_questions (source de vérité)
+                if t.ordre_questions:
+                    questions_count = len(t.ordre_questions)
+                else:
+                    questions_count = 0
+                item['questions_count'] = questions_count
+                item['total_questions'] = questions_count  # Synchroniser total_questions avec questions_count
                 # S'assurer que created_at est inclus
                 if hasattr(t, 'created_at') and t.created_at:
                     item['created_at'] = t.created_at.isoformat() if hasattr(t.created_at, 'isoformat') else str(t.created_at)
@@ -355,9 +381,19 @@ def list_active_versions(request):
     qs = Test.objects.filter(is_active=True).order_by('version')
     serializer = TestListSerializer(qs, many=True)
     data = serializer.data
-    # ajouter 'name' pour le frontend
-    for item in data:
+    # ajouter 'name' et s'assurer que questions_count est correct
+    test_list = list(qs)  # Convertir en liste pour éviter les requêtes multiples
+    for idx, item in enumerate(data):
         item['name'] = f"Version {item.get('version')}"
+        # Calculer questions_count depuis ordre_questions (source de vérité)
+        if idx < len(test_list):
+            test_obj = test_list[idx]
+            if test_obj.ordre_questions:
+                questions_count = len(test_obj.ordre_questions)
+            else:
+                questions_count = 0
+            item['questions_count'] = questions_count
+            item['total_questions'] = questions_count  # Synchroniser total_questions
     return Response({'versions': data})
 
 
@@ -385,8 +421,52 @@ def version_detail(request, pk):
         data['name'] = f"Version {test.version}"
         return Response({'success': True, 'version': data})
     # DELETE
-    test.delete()
-    return Response({'success': True})
+    import logging
+    from django.db import connection
+    logger = logging.getLogger(__name__)
+    
+    try:
+        # Supprimer directement via SQL pour éviter les problèmes de cascade avec les certificats
+        with connection.cursor() as cursor:
+            # Supprimer d'abord les tentatives associées
+            cursor.execute("DELETE FROM tests_testattempt WHERE test_id = %s", [test.id])
+            # Supprimer le test
+            cursor.execute("DELETE FROM tests_test WHERE id = %s", [test.id])
+        
+        return Response({'success': True, 'message': 'Version supprimée avec succès'})
+    except Exception as e:
+        logger.error(f"Erreur lors de la suppression de la version {pk}: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        
+        # Si erreur SQL, essayer avec l'ORM mais en gérant les erreurs de certificats
+        try:
+            from tests.models import TestAttempt
+            # Supprimer les tentatives
+            TestAttempt.objects.filter(test=test).delete()
+            # Supprimer le test
+            test.delete()
+            return Response({'success': True, 'message': 'Version supprimée avec succès'})
+        except Exception as e2:
+            error_str = str(e2).lower()
+            # Si l'erreur est liée aux certificats, ignorer et supprimer quand même
+            if 'certificat' in error_str or 'certificate' in error_str:
+                logger.warning(f"Erreur liée aux certificats ignorée: {error_str}")
+                # Forcer la suppression via SQL brut
+                try:
+                    with connection.cursor() as cursor:
+                        cursor.execute("DELETE FROM tests_test WHERE id = %s", [test.id])
+                    return Response({'success': True, 'message': 'Version supprimée avec succès'})
+                except Exception as e3:
+                    return Response({
+                        'success': False, 
+                        'error': f'Erreur lors de la suppression: {str(e3)}'
+                    }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            else:
+                return Response({
+                    'success': False, 
+                    'error': f'Erreur lors de la suppression: {str(e2)}'
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['GET'])
@@ -444,10 +524,14 @@ def version_update_order(request, pk):
     test.total_questions = len(ordre_questions)  # Mettre à jour total_questions selon ordre_questions
     test.save()
     
+    # Forcer le recalcul de questions_count en rechargant l'objet
+    test.refresh_from_db()
+    
     return Response({
         'success': True,
         'ordre_questions': test.ordre_questions,
-        'total_questions': test.total_questions
+        'total_questions': test.total_questions,
+        'questions_count': test.questions_count  # Inclure questions_count dans la réponse
     })
 
 
@@ -543,7 +627,24 @@ def test_finish_public(request, test_id):
         
         # Vérifier la réponse en utilisant la méthode check_answer du modèle
         is_correct = question.check_answer(user_answer)
-        user_answers_dict[str(qid)] = user_answer
+        
+        # Encoder la réponse dans la langue choisie
+        answer_text = None
+        if langue == 'fr':
+            answer_text = 'Oui' if user_answer else 'Non'
+        elif langue == 'en':
+            answer_text = 'Yes' if user_answer else 'No'
+        elif langue == 'ar':
+            answer_text = 'نعم' if user_answer else 'لا'
+        else:
+            answer_text = 'Oui' if user_answer else 'Non'  # Par défaut français
+        
+        # Stocker la réponse avec le booléen ET le texte dans la langue choisie
+        user_answers_dict[str(qid)] = {
+            'answer': user_answer,  # Booléen pour le calcul
+            'answer_text': answer_text,  # Texte dans la langue choisie
+            'langue': langue  # Langue utilisée
+        }
         
         # Déterminer si la question est obligatoire
         is_mandatory_question = qid in mandatory_ids or question.is_mandatory
@@ -593,24 +694,43 @@ def test_finish_public(request, test_id):
                 }
             )
             
-            # Créer TestAttempt
-            attempt = TestAttempt.objects.create(
+            # Créer ou mettre à jour TestAttempt (get_or_create pour éviter les doublons)
+            attempt, created = TestAttempt.objects.get_or_create(
                 test=test,
                 user=test_user,
-                langue=langue,
-                user_answers=user_answers_dict,
-                mandatory_correct=mandatory_correct,
-                optional_correct=optional_correct,
-                mandatory_total=total_mandatory,
-                optional_total=total_optional,
-                mandatory_score_percentage=round(mandatory_score_percentage, 2),
-                optional_score_percentage=round(optional_score_percentage, 2),
-                overall_score_percentage=round(overall_score_percentage, 2),
-                passed=passed,
-                status='passed' if passed else 'failed',
-                time_taken_seconds=time_taken,
-                completed_at=timezone.now()
+                defaults={
+                    'langue': langue,
+                    'user_answers': user_answers_dict,
+                    'mandatory_correct': mandatory_correct,
+                    'optional_correct': optional_correct,
+                    'mandatory_total': total_mandatory,
+                    'optional_total': total_optional,
+                    'mandatory_score_percentage': round(mandatory_score_percentage, 2),
+                    'optional_score_percentage': round(optional_score_percentage, 2),
+                    'overall_score_percentage': round(overall_score_percentage, 2),
+                    'passed': passed,
+                    'status': 'passed' if passed else 'failed',
+                    'time_taken_seconds': time_taken,
+                    'completed_at': timezone.now()
+                }
             )
+            
+            # Si l'attempt existe déjà, mettre à jour ses données
+            if not created:
+                attempt.langue = langue
+                attempt.user_answers = user_answers_dict
+                attempt.mandatory_correct = mandatory_correct
+                attempt.optional_correct = optional_correct
+                attempt.mandatory_total = total_mandatory
+                attempt.optional_total = total_optional
+                attempt.mandatory_score_percentage = round(mandatory_score_percentage, 2)
+                attempt.optional_score_percentage = round(optional_score_percentage, 2)
+                attempt.overall_score_percentage = round(overall_score_percentage, 2)
+                attempt.passed = passed
+                attempt.status = 'passed' if passed else 'failed'
+                attempt.time_taken_seconds = time_taken
+                attempt.completed_at = timezone.now()
+                attempt.save()
             
             # Mettre à jour sensibilise_avec_succes dans HSEUser
             try:

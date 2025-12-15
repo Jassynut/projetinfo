@@ -20,19 +20,68 @@ def search_hse_user_by_cin(request):
     GET: /api/hse/users/search/?cin=AB123456
     Note: Pas de @login_required car utilisé pour vérifier le CIN avant authentification
     """
-    cin = request.GET.get('cin', '').strip().upper().replace(' ', '')
+    cin_raw = request.GET.get('cin', '').strip()
     
-    if not cin:
+    if not cin_raw:
         return JsonResponse({
             'success': False,
             'error': 'CIN requis'
         }, status=400)
     
+    # Log pour débogage
+    import logging
+    import sys
+    logger = logging.getLogger(__name__)
+    
+    # Normaliser le CIN de la requête (majuscules, supprimer espaces, tirets, underscores)
+    cin = cin_raw.upper()
+    cin_normalized = cin.replace(' ', '').replace('-', '').replace('_', '').strip()
+    
+    # Logger dans stdout pour voir dans docker logs
+    print(f"[CIN SEARCH] Recherche CIN: original='{cin_raw}' -> majuscules='{cin}' -> normalisé='{cin_normalized}'", file=sys.stderr)
+    logger.info(f"Recherche CIN: original='{cin_raw}' -> majuscules='{cin}' -> normalisé='{cin_normalized}'")
+    
     try:
-        # Recherche insensible à la casse (iexact)
-        # Normaliser le CIN en supprimant les espaces
-        cin_normalized = cin.replace(' ', '').replace('-', '').replace('_', '')
-        user = HSEUser.objects.get(cin__iexact=cin_normalized)
+        # Essayer d'abord recherche exacte insensible à la casse
+        user = None
+        try:
+            user = HSEUser.objects.get(cin__iexact=cin_normalized)
+            print(f"[CIN SEARCH] ✓ Trouvé avec iexact: {user.cin}", file=sys.stderr)
+            logger.info(f"CIN trouvé avec recherche exacte: {user.cin}")
+        except HSEUser.DoesNotExist:
+            # Si pas trouvé, essayer avec recherche qui ignore les espaces dans la base
+            print(f"[CIN SEARCH] ✗ Non trouvé avec iexact, recherche dans tous les utilisateurs...", file=sys.stderr)
+            logger.info(f"CIN non trouvé avec recherche exacte, recherche dans tous les utilisateurs...")
+            
+            # Essayer aussi avec le CIN original (sans normalisation)
+            try:
+                user = HSEUser.objects.get(cin__iexact=cin)
+                print(f"[CIN SEARCH] ✓ Trouvé avec iexact (original): {user.cin}", file=sys.stderr)
+                logger.info(f"CIN trouvé avec recherche exacte (original): {user.cin}")
+            except HSEUser.DoesNotExist:
+                # Chercher tous les utilisateurs et comparer manuellement
+                all_users = HSEUser.objects.all()
+                user_count = all_users.count()
+                print(f"[CIN SEARCH] Parcours de {user_count} utilisateurs...", file=sys.stderr)
+                
+                for u in all_users:
+                    # Normaliser le CIN de la base de données
+                    db_cin = str(u.cin)
+                    db_cin_normalized = db_cin.replace(' ', '').replace('-', '').replace('_', '').strip().upper()
+                    
+                    # Comparer avec le CIN normalisé de la requête
+                    if db_cin_normalized == cin_normalized:
+                        user = u
+                        print(f"[CIN SEARCH] ✓ Trouvé avec normalisation: {u.cin} (recherché: {cin_normalized})", file=sys.stderr)
+                        logger.info(f"CIN trouvé avec recherche normalisée: {u.cin} (recherché: {cin_normalized})")
+                        break
+                
+                if not user:
+                    # Log tous les CIN disponibles pour débogage
+                    all_cins = [str(u.cin) for u in HSEUser.objects.all()[:10]]  # Limiter à 10 pour le log
+                    print(f"[CIN SEARCH] ✗ CIN non trouvé. Recherché: '{cin_normalized}'. Exemples: {all_cins}", file=sys.stderr)
+                    logger.warning(f"CIN non trouvé. CIN recherché: '{cin_normalized}'. Exemples de CIN en base: {all_cins}")
+                    raise HSEUser.DoesNotExist
         
         # Récupérer les tentatives de test (optionnel, seulement si authentifié)
         attempts_data = []
@@ -367,9 +416,10 @@ def submit_hse_test_answers(request, attempt_id):
             
             if isinstance(user_answer, str):
                 user_answer = user_answer.lower().strip()
-                if user_answer in ['true', 'vrai', '1', 'yes', 'oui', 't']:
+                # Gérer les réponses en français, anglais et arabe
+                if user_answer in ['true', 'vrai', '1', 'yes', 'oui', 't', 'نعم']:
                     user_answer = True
-                elif user_answer in ['false', 'faux', '0', 'no', 'non', 'f']:
+                elif user_answer in ['false', 'faux', '0', 'no', 'non', 'f', 'لا']:
                     user_answer = False
                 else:
                     continue  # Réponse invalide, passer à la suivante

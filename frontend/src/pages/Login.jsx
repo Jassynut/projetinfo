@@ -43,6 +43,9 @@ export default function Login() {
         localStorage.setItem("loggedIn", "true");
         localStorage.setItem("userType", "manager");
         localStorage.setItem("userData", JSON.stringify(response.data.user));
+        // Supprimer le flag apprenant si présent (pour permettre l'accès admin)
+        sessionStorage.removeItem("isLearner");
+        sessionStorage.removeItem("currentTestId");
         navigate("/dashboard");
       } else {
         setError(response.data.error || "Identifiants incorrects");

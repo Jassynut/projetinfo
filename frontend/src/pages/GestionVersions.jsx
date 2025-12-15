@@ -55,13 +55,25 @@ export default function GestionVersions() {
       }
       
       // Normaliser les données
-      items = items.map((v) => ({ 
-        ...v, 
-        name: v.name || `Version ${v.version || ''}`,
-        // Utiliser questions_count (basé sur ordre_questions) ou calculer depuis ordre_questions
-        total_questions: v.questions_count || (v.ordre_questions ? v.ordre_questions.length : 0) || v.total_questions || 0,
-        created_at: v.created_at || v.createdAt || null
-      }));
+      items = items.map((v) => {
+        // Calculer le nombre exact de questions depuis ordre_questions
+        let questionsCount = 0;
+        if (v.ordre_questions && Array.isArray(v.ordre_questions)) {
+          questionsCount = v.ordre_questions.length;
+        } else if (v.questions_count !== undefined) {
+          questionsCount = v.questions_count;
+        } else if (v.total_questions !== undefined) {
+          questionsCount = v.total_questions;
+        }
+        
+        return {
+          ...v, 
+          name: v.name || `Version ${v.version || ''}`,
+          total_questions: questionsCount,
+          questions_count: questionsCount,  // S'assurer que questions_count est défini
+          created_at: v.created_at || v.createdAt || null
+        };
+      });
       
       console.log("Versions chargées:", items);
       setVersions(items);
@@ -108,16 +120,21 @@ export default function GestionVersions() {
     setLoading(true);
     setError("");
     try {
+      let response;
       if (editingVersion) {
-        await axios.put(`${API_BASE}/api/versions/${editingVersion.id}`, {
+        response = await axios.put(`${API_BASE}/api/versions/${editingVersion.id}`, {
           name: form.name,
           description: form.description,
         });
       } else {
-        await axios.post(`${API_BASE}/api/versions`, {
+        response = await axios.post(`${API_BASE}/api/versions`, {
           name: form.name,
           description: form.description,
         });
+        // Afficher un message de succès si disponible
+        if (response.data?.message) {
+          alert(response.data.message);
+        }
       }
       setShowModal(false);
       fetchVersions();
@@ -201,7 +218,11 @@ export default function GestionVersions() {
                     {v.name || `Version ${v.version || v.id}`}
                   </td>
                   <td className="p-3 border">
-                    {v.questions_count || (v.ordre_questions ? v.ordre_questions.length : 0) || v.total_questions || 0}
+                    {v.questions_count !== undefined && v.questions_count !== null 
+                      ? v.questions_count 
+                      : (v.ordre_questions && Array.isArray(v.ordre_questions) 
+                        ? v.ordre_questions.length 
+                        : (v.total_questions || 0))}
                   </td>
                   <td className="p-3 border">
                     {v.created_at
@@ -269,6 +290,12 @@ export default function GestionVersions() {
                   placeholder="Détails sur cette version..."
                 />
               </div>
+              {!editingVersion && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
+                  <p className="font-semibold mb-1">ℹ️ Information</p>
+                  <p>Toutes les questions actives de la base de données seront automatiquement ajoutées à cette version. Vous pourrez ensuite modifier l'ordre par glisser-déposer dans la page de modification.</p>
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end gap-3 mt-6">

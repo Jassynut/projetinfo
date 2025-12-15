@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
-import TopNav from "../components/TopNav";
+import TopNavLearner from "../components/TopNavLearner";
 
 import { API_BASE } from "../config";
 
@@ -55,7 +55,7 @@ export default function ResultatTest() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-green-300 p-8 flex items-center justify-center">
       <div className="bg-white rounded-xl shadow-lg border border-green-200 p-8 w-full max-w-3xl text-center">
-        <TopNav className="mb-4" />
+        <TopNavLearner className="mb-4" />
         {loading && <p className="text-gray-600">Chargement...</p>}
         {error && <p className="text-red-600 mb-3">{error}</p>}
 
@@ -82,11 +82,15 @@ export default function ResultatTest() {
                   Télécharger le certificat
                 </button>
               )}
+              {/* Les apprenants ne peuvent pas retourner à la sélection */}
               <button
-                className="bg-green-700 text-white px-5 py-3 rounded-lg shadow hover:bg-green-800"
-                onClick={() => navigate("/test/selection")}
+                className="bg-gray-500 text-white px-5 py-3 rounded-lg shadow hover:bg-gray-600"
+                onClick={() => {
+                  // Fermer la page ou afficher un message
+                  alert("Merci d'avoir passé le test. Vous pouvez fermer cette page.");
+                }}
               >
-                {data?.passed === true ? "Revenir à la sélection" : "Revenir à la sélection"}
+                Fermer
               </button>
             </div>
 

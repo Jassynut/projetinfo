@@ -66,11 +66,23 @@ class HSEUser(models.Model):
     @property
     def taux_reussite(self):
         """Taux de réussite global de l'utilisateur"""
-        attempts = self.testattempt_set.filter(completed_at__isnull=False)
-        if not attempts:
+        try:
+            from tests.models import TestAttempt
+            from authentication.models import TestUser
+            
+            # Chercher le TestUser correspondant par CIN
+            test_user = TestUser.objects.filter(cin=self.cin).first()
+            if not test_user:
+                return 0
+            
+            # Récupérer les tentatives via TestUser
+            attempts = TestAttempt.objects.filter(user=test_user, completed_at__isnull=False)
+            if not attempts:
+                return 0
+            reussis = attempts.filter(passed=True).count()
+            return round((reussis / attempts.count()) * 100, 1)
+        except Exception:
             return 0
-        reussis = attempts.filter(passed=True).count()
-        return round((reussis / attempts.count()) * 100, 1)
 
 class HSEManager(models.Model):
     """Manager pour les opérations HSE spécifiques"""

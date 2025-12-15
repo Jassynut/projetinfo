@@ -100,14 +100,16 @@ def hse_stats(request):
     presence_percentage = (present_users / total_users * 100) if total_users > 0 else 0
     
     # 5️⃣ Calculer la moyenne des tests pour le jour sélectionné
+    # Filtrer uniquement les tests terminés pendant ce jour (completed_at à cette date)
     attempts_for_date = TestAttempt.objects.filter(
         completed_at__date=selected_date,
+        completed_at__isnull=False,
         status__in=['passed', 'failed']
     )
     total_attempts = attempts_for_date.count()
     
     if total_attempts > 0:
-        # Calculer la moyenne des scores
+        # Calculer la moyenne des scores globaux (overall_score_percentage)
         total_score = sum(attempt.overall_score_percentage for attempt in attempts_for_date)
         average_test_score = total_score / total_attempts
     else:

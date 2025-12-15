@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import TopNav from "../components/TopNav";
 
@@ -13,20 +13,25 @@ export default function Database() {
   const [presenceMap, setPresenceMap] = useState({}); // Map pour stocker la présence par CIN ou ID
   const [filterDate, setFilterDate] = useState(''); // Date pour filtrer les utilisateurs
   const [selectedUsers, setSelectedUsers] = useState([]); // IDs des utilisateurs sélectionnés pour suppression
+  const [searchQuery, setSearchQuery] = useState(''); // Recherche par CIN, Nom ou Prénom
+  const searchTimeoutRef = useRef(null); // Référence pour le timeout de recherche
 
   useEffect(() => {
-    fetchUsers();
+    fetchUsers(null, '');
   }, []);
 
-  const fetchUsers = async (dateFilter = null) => {
+  const fetchUsers = async (dateFilter = null, search = '') => {
     setLoading(true);
     try {
-      // Construire l'URL avec le filtre de date si fourni et page_size pour récupérer tous les utilisateurs
+      // Construire l'URL avec le filtre de date et la recherche si fournis
       let url = `${API_BASE}/api/hse/users/list/`;
       const params = new URLSearchParams();
       params.append('page_size', '10000'); // Nombre très élevé pour récupérer tous les utilisateurs
       if (dateFilter) {
         params.append('date_ajout', dateFilter);
+      }
+      if (search && search.trim()) {
+        params.append('search', search.trim());
       }
       url += `?${params.toString()}`;
       
@@ -58,9 +63,40 @@ export default function Database() {
     // Vider tableData quand on applique un filtre de date pour forcer l'affichage des users filtrés
     if (date) {
       setTableData([]);
-      fetchUsers(date);
+      fetchUsers(date, searchQuery);
     } else {
-      fetchUsers(); // Recharger tous les utilisateurs si pas de filtre
+      fetchUsers(null, searchQuery); // Recharger tous les utilisateurs si pas de filtre
+    }
+  };
+
+  const handleSearchChange = (e) => {
+    const query = e.target.value;
+    setSearchQuery(query);
+    
+    // Annuler le timeout précédent s'il existe
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+    
+    // Déclencher la recherche après un court délai (debounce)
+    searchTimeoutRef.current = setTimeout(() => {
+      if (query.trim()) {
+        setTableData([]); // Vider tableData pour afficher les résultats de recherche
+        fetchUsers(filterDate || null, query.trim());
+      } else {
+        // Si la recherche est vide, recharger tous les utilisateurs
+        fetchUsers(filterDate || null, '');
+      }
+    }, 300); // Attendre 300ms après la dernière frappe
+  };
+
+  const handleSearchSubmit = (e) => {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      setTableData([]);
+      fetchUsers(filterDate || null, searchQuery.trim());
+    } else {
+      fetchUsers(filterDate || null, '');
     }
   };
 
@@ -377,9 +413,9 @@ export default function Database() {
         // Recharger les données
         setSelectedUsers([]);
         if (filterDate) {
-          await fetchUsers(filterDate);
+          await fetchUsers(filterDate, searchQuery);
         } else {
-          await fetchUsers();
+          await fetchUsers(null, searchQuery);
         }
         // Vider tableData si nécessaire
         if (tableData.length > 0) {
@@ -506,7 +542,7 @@ export default function Database() {
             <button
               onClick={() => {
                 setFilterDate('');
-                fetchUsers();
+                fetchUsers(null, searchQuery);
               }}
               className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition"
             >
@@ -518,6 +554,47 @@ export default function Database() {
           <p className="mt-2 text-sm text-gray-600">
             Affichage des utilisateurs ajoutés le <strong>{new Date(filterDate).toLocaleDateString('fr-FR')}</strong>
             {users.length > 0 && <span className="ml-2 text-green-600">({users.length} utilisateur{users.length > 1 ? 's' : ''})</span>}
+          </p>
+        )}
+      </div>
+
+      {/* BARRE DE RECHERCHE */}
+      <div className="bg-white p-4 rounded-lg shadow-md border border-green-200 mb-6">
+        <label htmlFor="searchInput" className="block text-green-700 font-semibold mb-2">
+          🔍 Rechercher un apprenant :
+        </label>
+        <form onSubmit={handleSearchSubmit} className="flex gap-2">
+          <input
+            type="text"
+            id="searchInput"
+            className="flex-1 px-4 py-2 border border-green-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+            placeholder="Rechercher par CIN, Nom ou Prénom..."
+            value={searchQuery}
+            onChange={handleSearchChange}
+          />
+          <button
+            type="submit"
+            className="px-4 py-2 bg-green-700 text-white rounded-lg hover:bg-green-800 transition"
+          >
+            Rechercher
+          </button>
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchQuery('');
+                fetchUsers(filterDate || null, '');
+              }}
+              className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition"
+            >
+              Effacer
+            </button>
+          )}
+        </form>
+        {searchQuery && (
+          <p className="mt-2 text-sm text-gray-600">
+            Résultats de recherche pour : <strong>"{searchQuery}"</strong>
+            {users.length > 0 && <span className="ml-2 text-green-600">({users.length} résultat{users.length > 1 ? 's' : ''})</span>}
           </p>
         )}
       </div>
