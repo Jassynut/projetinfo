@@ -59,6 +59,19 @@ class Test(models.Model):
         help_text="Liste des IDs des questions obligatoires"
     )
     
+    # État du test
+    ETAT_CHOICES = [
+        ('test_initial', 'Test initial'),
+        ('test_final', 'Test final'),
+    ]
+    etat = models.CharField(
+        max_length=20,
+        choices=ETAT_CHOICES,
+        default='test_final',
+        verbose_name="État",
+        help_text="Détermine si c'est un test initial ou final"
+    )
+    
     # Métadonnées
     is_active = models.BooleanField(default=True, verbose_name="Actif")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Date de création")
@@ -71,6 +84,7 @@ class Test(models.Model):
         indexes = [
             models.Index(fields=['is_active']),
             models.Index(fields=['version']),
+            models.Index(fields=['etat']),
         ]
     
     def __str__(self):
@@ -283,6 +297,19 @@ class TestAttempt(models.Model):
         verbose_name="Langue du test"
     )
     
+    # État du test (hérite du test ou peut être défini séparément)
+    ETAT_CHOICES = [
+        ('test_initial', 'Test initial'),
+        ('test_final', 'Test final'),
+    ]
+    etat = models.CharField(
+        max_length=20,
+        choices=ETAT_CHOICES,
+        default='test_final',
+        verbose_name="État",
+        help_text="État du test (initial ou final)"
+    )
+    
     # Statut de la tentative
     status = models.CharField(
         max_length=20,
@@ -367,6 +394,7 @@ class TestAttempt(models.Model):
             models.Index(fields=['passed']),
             models.Index(fields=['status']),
             models.Index(fields=['langue']),
+            models.Index(fields=['etat']),
         ]
     
     def __str__(self):
@@ -432,19 +460,21 @@ class TestAttempt(models.Model):
                 continue
         
         # Réussite: toutes les questions obligatoires correctes
-        # Calculer le total des questions obligatoires
-        total_mandatory = len(mandatory_ids) if mandatory_ids else 0
-        if total_mandatory == 0:
-            # Si aucune question n'est marquée comme obligatoire dans le test,
-            # compter celles avec is_mandatory=True
-            for question_id_str in self.user_answers.keys():
-                try:
-                    question_id = int(question_id_str)
-                    question = Question.objects.get(id=question_id)
-                    if question.is_mandatory:
-                        total_mandatory += 1
-                except (Question.DoesNotExist, ValueError):
-                    continue
+        # Calculer le total des questions obligatoires RÉPONDUES par l'utilisateur
+        # On ne compte que les questions obligatoires présentes dans user_answers
+        total_mandatory = 0
+        for question_id_str in self.user_answers.keys():
+            try:
+                question_id = int(question_id_str)
+                question = Question.objects.get(id=question_id)
+                # Déterminer si la question est obligatoire :
+                # 1. Si elle est dans mandatory_questions du test
+                # 2. Sinon, si is_mandatory de la question est True
+                is_mandatory_question = question_id in mandatory_ids or question.is_mandatory
+                if is_mandatory_question:
+                    total_mandatory += 1
+            except (Question.DoesNotExist, ValueError):
+                continue
         
         passed = (mandatory_correct == total_mandatory) if total_mandatory > 0 else False
         

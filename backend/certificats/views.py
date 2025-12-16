@@ -128,20 +128,52 @@ def download_certificate_by_id(request, certificate_id):
                 'error': 'Le certificat a expiré'
             }, status=410)
         
-        # Générer le HTML du certificat
-        # Si c'est un certificat de sensibilisation (test_version=0), utiliser le texte spécial
-        custom_text = "Vous avez réussi votre formation HSE" if certificate.test_version == 0 else None
+        # Récupérer les informations détaillées de l'utilisateur depuis HSEUser
+        user_nom = ""
+        user_prenom = ""
+        user_entite = ""
+        user_chef_projet = ""
+        test_date = certificate.issued_date.strftime('%d/%m/%Y')
+        
+        try:
+            from hse_app.models import HSEUser
+            hse_user = HSEUser.objects.get(cin=certificate.user_cin)
+            user_nom = hse_user.nom
+            user_prenom = hse_user.prénom
+            user_entite = hse_user.entite or ""
+            user_chef_projet = hse_user.chef_projet_ocp or ""
+            
+            # Si on a une tentative de test, utiliser sa date de complétion
+            if certificate.test_attempt and certificate.test_attempt.completed_at:
+                test_date = certificate.test_attempt.completed_at.strftime('%d/%m/%Y')
+        except HSEUser.DoesNotExist:
+            # Si l'utilisateur HSE n'existe pas, extraire nom/prénom du full_name
+            name_parts = certificate.user_full_name.split(' ', 1)
+            if len(name_parts) >= 2:
+                user_prenom = name_parts[0]
+                user_nom = name_parts[1]
+            else:
+                user_nom = certificate.user_full_name
+        
+        # Chemin absolu du logo pour xhtml2pdf
+        from django.conf import settings
+        import os
+        logo_path = os.path.join(settings.BASE_DIR, 'backend', 'public', 'logo_ocp.webp')
+        # Si le fichier webp n'existe pas, essayer png
+        if not os.path.exists(logo_path):
+            logo_path = os.path.join(settings.BASE_DIR, 'backend', 'public', 'ocp-logo.png')
+        # Si toujours pas trouvé, utiliser placeholder
+        if not os.path.exists(logo_path):
+            logo_path = os.path.join(settings.BASE_DIR, 'backend', 'public', 'placeholder-logo.png')
         
         html_string = render_to_string('certificats/certificate.html', {
-            'certificate_number': certificate.certificate_number,
-            'user_full_name': certificate.user_full_name,
+            'user_nom': user_nom,
+            'user_prenom': user_prenom,
             'user_cin': certificate.user_cin,
-            'test_version': certificate.test_version,
-            'score': certificate.score,
-            'issued_date': certificate.issued_date.strftime('%d/%m/%Y'),
-            'expiry_date': certificate.expiry_date.strftime('%d/%m/%Y'),
-            'days_until_expiry': certificate.days_until_expiry,
-            'custom_text': custom_text
+            'user_entite': user_entite,
+            'user_chef_projet': user_chef_projet,
+            'test_date': test_date,
+            'logo_path': logo_path
         })
         
         response = HttpResponse(content_type='application/pdf')

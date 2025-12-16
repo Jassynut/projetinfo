@@ -12,9 +12,12 @@ const getApiBase = () => {
     return 'http://127.0.0.1:8000';
   }
   
-  // Pour Docker, utiliser l'IP de la machine
-  // Remplacer par votre IP locale si nécessaire
-  return 'http://10.24.159.24:8000';
+  // Pour Docker, utiliser le même hostname que le frontend
+  // Cela permet de fonctionner avec localhost ou avec une IP locale
+  const port = window.location.port || '3000';
+  const protocol = window.location.protocol;
+  // Extraire le hostname et utiliser le port 8000 pour le backend
+  return `${protocol}//${hostname}:8000`;
 };
 
 export const API_BASE = getApiBase();

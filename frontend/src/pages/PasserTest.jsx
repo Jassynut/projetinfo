@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import axios from "axios";
-import TopNavLearnerLearner from "../components/TopNavLearnerLearner";
+import TopNavLearner from "../components/TopNavLearner";
 import { API_BASE } from "../config";
 const TEST_DURATION_SECONDS = 600; // 10 minutes
 const CNI_REGEX = /^[A-Z]{1,2}\d{5,6}$/i;
@@ -220,18 +220,23 @@ export default function PasserTest() {
     setSubmitting(true);
     setError("");
     try {
+      // Récupérer l'état du test depuis localStorage (pour les managers)
+      const testEtat = localStorage.getItem('selectedTestEtat') || 'test_final';
+      
       const response = await axios.post(`${API_BASE}/api/test/${id}/terminer`, {
         answers,
         time_taken_seconds: TEST_DURATION_SECONDS - secondsLeft,
         cin: currentCin.toUpperCase(),
         langue: selectedLanguage,
+        etat: testEtat,
       });
       
-      // Vérifier que l'attempt a été créé
-      if (response.data?.success && response.data?.attempt_id) {
-        navigate(`/test/${id}/resultat`);
-      } else if (response.data?.success) {
-        // Attempt créé mais pas d'ID retourné (peut arriver)
+      // Stocker les données du résultat dans sessionStorage pour la page de résultat
+      if (response.data?.success) {
+        sessionStorage.setItem('testResult', JSON.stringify({
+          ...response.data,
+          cin: currentCin.toUpperCase()
+        }));
         navigate(`/test/${id}/resultat`);
       } else {
         setError(response.data?.error || "Erreur lors de l'enregistrement du test.");
@@ -275,7 +280,7 @@ export default function PasserTest() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-green-300 p-4 md:p-8">
       <div className="max-w-5xl mx-auto bg-white rounded-xl shadow-lg border border-green-200 p-6">
-        <TopNavLearnerLearner className="mb-4" />
+        <TopNavLearner className="mb-4" />
         <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
           <div>
             <h1 className="text-xl font-bold text-green-900">Test HSE</h1>

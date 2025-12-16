@@ -585,6 +585,8 @@ def test_finish_public(request, test_id):
     cin = request.data.get('cin', '').strip().upper()
     langue = request.data.get('langue', 'fr')
     time_taken = request.data.get('time_taken_seconds', 0)
+    # Utiliser l'état fourni, sinon celui du test, sinon test_final par défaut
+    etat = request.data.get('etat', getattr(test, 'etat', 'test_final'))
     
     cache_key = f"test_answers:{request.session.session_key}:{test_id}"
     cached_answers = cache.get(cache_key, {})
@@ -657,8 +659,19 @@ def test_finish_public(request, test_id):
                 optional_correct += 1
 
     total_score = mandatory_correct + optional_correct
-    total_mandatory = len(mandatory_ids) if mandatory_ids else 0
-    total_optional = test.total_questions - total_mandatory
+    # Calculer le total des questions obligatoires RÉPONDUES par l'utilisateur
+    # On ne compte que les questions obligatoires présentes dans cached_answers
+    total_mandatory = 0
+    for qid_str in cached_answers.keys():
+        try:
+            qid = int(qid_str)
+            question = Question.objects.get(id=qid)
+            is_mandatory_question = qid in mandatory_ids or question.is_mandatory
+            if is_mandatory_question:
+                total_mandatory += 1
+        except (ValueError, Question.DoesNotExist):
+            continue
+    total_optional = len(cached_answers) - total_mandatory
     
     # Calculer les pourcentages
     mandatory_score_percentage = (mandatory_correct / total_mandatory * 100) if total_mandatory > 0 else 0
@@ -700,6 +713,7 @@ def test_finish_public(request, test_id):
                 user=test_user,
                 defaults={
                     'langue': langue,
+                    'etat': etat,
                     'user_answers': user_answers_dict,
                     'mandatory_correct': mandatory_correct,
                     'optional_correct': optional_correct,
@@ -718,6 +732,7 @@ def test_finish_public(request, test_id):
             # Si l'attempt existe déjà, mettre à jour ses données
             if not created:
                 attempt.langue = langue
+                attempt.etat = etat
                 attempt.user_answers = user_answers_dict
                 attempt.mandatory_correct = mandatory_correct
                 attempt.optional_correct = optional_correct
@@ -740,6 +755,66 @@ def test_finish_public(request, test_id):
                 import logging
                 logger = logging.getLogger(__name__)
                 logger.error(f"Erreur mise à jour sensibilise_avec_succes: {str(e)}")
+            
+            # Générer automatiquement un certificat uniquement si le test est réussi ET si c'est un test final
+            if passed and attempt and attempt.etat == 'test_final':
+                try:
+                    from certificats.models import Certificate
+                    from datetime import datetime, timedelta
+                    import uuid
+                    from django.db import connection
+                    
+                    # Vérifier si la table certificats_certificate existe
+                    table_exists = False
+                    try:
+                        with connection.cursor() as cursor:
+                            cursor.execute("SHOW TABLES LIKE 'certificats_certificate'")
+                            table_exists = cursor.fetchone() is not None
+                    except Exception:
+                        table_exists = False
+                    
+                    if table_exists:
+                        # Vérifier si un certificat existe déjà pour cette tentative
+                        try:
+                            existing_certificate = Certificate.objects.filter(test_attempt=attempt).first()
+                            if not existing_certificate:
+                                # Créer un nouveau certificat
+                                user_full_name = hse_user.get_full_name() or hse_user.nom or f"User {cin}"
+                                user_cin = cin
+                                
+                                certificate_number = f"HSE-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
+                                expiry_date = (datetime.now() + timedelta(days=365)).date()
+                                
+                                certificate = Certificate.objects.create(
+                                    test_attempt=attempt,
+                                    certificate_number=certificate_number,
+                                    user_full_name=user_full_name,
+                                    user_cin=user_cin,
+                                    test_version=test.version,
+                                    score=int(overall_score_percentage),
+                                    expiry_date=expiry_date
+                                )
+                                import logging
+                                logger = logging.getLogger(__name__)
+                                logger.info(f"Certificat créé avec succès: {certificate.id} pour attempt {attempt.id}")
+                        except Exception as cert_error:
+                            import logging
+                            logger = logging.getLogger(__name__)
+                            logger.error(f"Erreur création certificat: {str(cert_error)}")
+                            import traceback
+                            logger.error(traceback.format_exc())
+                    else:
+                        import logging
+                        logger = logging.getLogger(__name__)
+                        logger.warning("Table certificats_certificate n'existe pas. Certificat non généré.")
+                except ImportError:
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.warning("Module certificats non disponible. Certificat non généré.")
+                except Exception as e:
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.error(f"Erreur génération certificat: {str(e)}")
         except Exception as e:
             import logging
             logger = logging.getLogger(__name__)
@@ -748,6 +823,30 @@ def test_finish_public(request, test_id):
     else:
         error_message = "CIN non fourni. Impossible d'enregistrer le test."
     
+    # Récupérer l'ID du certificat si généré (pour le cache aussi)
+    certificate_id_for_cache = None
+    if attempt:
+        try:
+            from certificats.models import Certificate
+            from django.db import connection
+            
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute("SHOW TABLES LIKE 'certificats_certificate'")
+                    table_exists = cursor.fetchone() is not None
+            except Exception:
+                table_exists = False
+            
+            if table_exists:
+                try:
+                    cert = Certificate.objects.filter(test_attempt=attempt).first()
+                    if cert:
+                        certificate_id_for_cache = str(cert.id)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+    
     # Stocker aussi dans le cache pour compatibilité
     cache.set(f"test_result:{request.session.session_key}:{test_id}", {
         'score': total_score,
@@ -755,7 +854,11 @@ def test_finish_public(request, test_id):
         'optional_correct': optional_correct,
         'test_version': test.version,
         'attempt_id': attempt.id if attempt else None,
-        'passed': passed
+        'passed': passed,
+        'certificate_id': certificate_id_for_cache,
+        'total_questions': test.total_questions,
+        'mandatory_total': total_mandatory,
+        'optional_total': total_optional
     }, 60 * 30)
     cache.delete(cache_key)
 
@@ -772,6 +875,33 @@ def test_finish_public(request, test_id):
             'error': 'Impossible de créer l\'enregistrement du test. CIN non trouvé.'
         }, status=400)
     
+    # Récupérer l'ID du certificat si généré
+    certificate_id = None
+    if attempt:
+        try:
+            from certificats.models import Certificate
+            from django.db import connection
+            
+            # Vérifier si la table existe avant d'essayer d'accéder à la relation
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute("SHOW TABLES LIKE 'certificats_certificate'")
+                    table_exists = cursor.fetchone() is not None
+            except Exception:
+                table_exists = False
+            
+            if table_exists:
+                try:
+                    certificate = Certificate.objects.filter(test_attempt=attempt).first()
+                    if certificate:
+                        certificate_id = str(certificate.id)
+                except Exception:
+                    pass
+        except ImportError:
+            pass
+        except Exception:
+            pass
+    
     return Response({
         'success': True,
         'score': total_score,
@@ -784,7 +914,9 @@ def test_finish_public(request, test_id):
         'mandatory_score_percentage': round(mandatory_score_percentage, 2),
         'optional_score_percentage': round(optional_score_percentage, 2),
         'passed': passed,
-        'attempt_id': attempt.id,
+        'attempt_id': attempt.id if attempt else None,
+        'certificate_id': certificate_id,
+        'cin': cin if cin else None,
         'message': 'Test enregistré avec succès'
     })
 
@@ -799,8 +931,15 @@ def test_result_public(request, test_id):
         'success': True,
         'score': data.get('score'),
         'test_version': data.get('test_version'),
-        'attempt_id': None,
-        'certificate_id': None,
+        'attempt_id': data.get('attempt_id'),
+        'certificate_id': data.get('certificate_id'),
+        'passed': data.get('passed'),
+        'mandatory_correct': data.get('mandatory_correct'),
+        'mandatory_total': data.get('mandatory_total'),
+        'optional_correct': data.get('optional_correct'),
+        'optional_total': data.get('optional_total'),
+        'total_questions': data.get('total_questions'),
+        'overall_score_percentage': data.get('overall_score_percentage'),
     })
 
 

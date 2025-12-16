@@ -15,6 +15,18 @@ export default function Database() {
   const [selectedUsers, setSelectedUsers] = useState([]); // IDs des utilisateurs sélectionnés pour suppression
   const [searchQuery, setSearchQuery] = useState(''); // Recherche par CIN, Nom ou Prénom
   const searchTimeoutRef = useRef(null); // Référence pour le timeout de recherche
+  const [showAddModal, setShowAddModal] = useState(false); // État pour afficher/masquer le modal d'ajout
+  const [newUser, setNewUser] = useState({
+    nom: '',
+    prenom: '',
+    cin: '',
+    entite: '',
+    entreprise: '',
+    chef_projet_ocp: '',
+    presence: false
+  });
+  const [addUserLoading, setAddUserLoading] = useState(false);
+  const [addUserError, setAddUserError] = useState('');
 
   useEffect(() => {
     fetchUsers(null, '');
@@ -37,7 +49,11 @@ export default function Database() {
       
       // Utiliser l'endpoint simple qui retourne le bon format
       const res = await axios.get(url);
+      console.log("[SEARCH] URL appelée:", url);
+      console.log("[SEARCH] Réponse reçue:", res.data);
+      
       if (res.data && res.data.success && res.data.users) {
+        console.log("[SEARCH] Nombre d'utilisateurs trouvés:", res.data.users.length);
         setUsers(res.data.users);
         // Initialiser la map de présence avec les données de la base
         const presence = {};
@@ -47,6 +63,7 @@ export default function Database() {
         });
         setPresenceMap(presence);
       } else {
+        console.log("[SEARCH] Aucun utilisateur trouvé ou format de réponse incorrect");
         setUsers([]);
       }
     } catch (err) {
@@ -97,6 +114,69 @@ export default function Database() {
       fetchUsers(filterDate || null, searchQuery.trim());
     } else {
       fetchUsers(filterDate || null, '');
+    }
+  };
+
+  const handleAddUser = async (e) => {
+    e.preventDefault();
+    setAddUserError('');
+    setAddUserLoading(true);
+
+    // Validation
+    if (!newUser.nom.trim()) {
+      setAddUserError('Le nom est requis');
+      setAddUserLoading(false);
+      return;
+    }
+    if (!newUser.cin.trim()) {
+      setAddUserError('Le CIN est requis');
+      setAddUserLoading(false);
+      return;
+    }
+
+    try {
+      const response = await axios.post(
+        `${API_BASE}/api/hse/users/create/`,
+        {
+          nom: newUser.nom.trim(),
+          prenom: newUser.prenom.trim(),
+          cin: newUser.cin.trim().toUpperCase(),
+          entite: newUser.entite.trim(),
+          entreprise: newUser.entreprise.trim(),
+          chef_projet_ocp: newUser.chef_projet_ocp.trim(),
+          presence: newUser.presence
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      if (response.data.success) {
+        // Réinitialiser le formulaire
+        setNewUser({
+          nom: '',
+          prenom: '',
+          cin: '',
+          entite: '',
+          entreprise: '',
+          chef_projet_ocp: '',
+          presence: false
+        });
+        setShowAddModal(false);
+        setAddUserError('');
+        // Recharger la liste des utilisateurs
+        await fetchUsers(filterDate || null, searchQuery);
+        alert('Apprenant ajouté avec succès !');
+      } else {
+        setAddUserError(response.data.error || 'Erreur lors de l\'ajout');
+      }
+    } catch (err) {
+      console.error('Erreur ajout apprenant:', err);
+      setAddUserError(err.response?.data?.error || err.message || 'Erreur lors de l\'ajout de l\'apprenant');
+    } finally {
+      setAddUserLoading(false);
     }
   };
 
@@ -630,6 +710,17 @@ export default function Database() {
               </button>
             )}
 
+            {/* BOUTON AJOUTER APPRENANT */}
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="px-4 py-2 bg-green-700 text-white rounded-lg hover:bg-green-800 transition flex items-center gap-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Ajouter un apprenant
+            </button>
+            
             {/* BOUTON IMPORT */}
             <button
               onClick={triggerFileDialog}
@@ -944,6 +1035,168 @@ export default function Database() {
         </div>
 
       </div>
+
+      {/* MODAL AJOUTER UN APPRENANT */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-2xl font-bold text-green-900">Ajouter un apprenant</h2>
+              <button
+                onClick={() => {
+                  setShowAddModal(false);
+                  setAddUserError('');
+                  setNewUser({
+                    nom: '',
+                    prenom: '',
+                    cin: '',
+                    entite: '',
+                    entreprise: '',
+                    chef_projet_ocp: '',
+                    presence: false
+                  });
+                }}
+                className="text-gray-500 hover:text-gray-700 text-2xl"
+              >
+                ×
+              </button>
+            </div>
+
+            <form onSubmit={handleAddUser} className="space-y-4">
+              {addUserError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+                  {addUserError}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Nom <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newUser.nom}
+                    onChange={(e) => setNewUser({ ...newUser, nom: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    placeholder="Nom"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Prénom
+                  </label>
+                  <input
+                    type="text"
+                    value={newUser.prenom}
+                    onChange={(e) => setNewUser({ ...newUser, prenom: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    placeholder="Prénom"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    CIN <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newUser.cin}
+                    onChange={(e) => setNewUser({ ...newUser, cin: e.target.value.toUpperCase() })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    placeholder="CIN (ex: AB123456)"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Entreprise
+                  </label>
+                  <input
+                    type="text"
+                    value={newUser.entreprise}
+                    onChange={(e) => setNewUser({ ...newUser, entreprise: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    placeholder="Entreprise"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Entité
+                  </label>
+                  <input
+                    type="text"
+                    value={newUser.entite}
+                    onChange={(e) => setNewUser({ ...newUser, entite: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    placeholder="Entité"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Chef de projet OCP
+                  </label>
+                  <input
+                    type="text"
+                    value={newUser.chef_projet_ocp}
+                    onChange={(e) => setNewUser({ ...newUser, chef_projet_ocp: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    placeholder="Chef de projet OCP"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="presence"
+                  checked={newUser.presence}
+                  onChange={(e) => setNewUser({ ...newUser, presence: e.target.checked })}
+                  className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
+                />
+                <label htmlFor="presence" className="ml-2 text-sm font-medium text-gray-700">
+                  Présence
+                </label>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddModal(false);
+                    setAddUserError('');
+                    setNewUser({
+                      nom: '',
+                      prenom: '',
+                      cin: '',
+                      entite: '',
+                      entreprise: '',
+                      chef_projet_ocp: '',
+                      presence: false
+                    });
+                  }}
+                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition"
+                  disabled={addUserLoading}
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-green-700 text-white rounded-lg hover:bg-green-800 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={addUserLoading}
+                >
+                  {addUserLoading ? 'Ajout en cours...' : 'Ajouter'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* FOOTER */}
       <footer className="text-center mt-20 text-gray-600 text-sm">

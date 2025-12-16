@@ -84,14 +84,25 @@ export default function CommencerTest() {
             Commencer le test sur cet appareil
           </button>
           {qrValue && (
-            <div className="border rounded-lg p-4 text-center bg-gray-50">
-              <p className="font-semibold text-green-800 mb-2">Scanner pour ouvrir sur un autre appareil</p>
+            <div className="border rounded-lg p-6 text-center bg-white">
+              <p className="font-semibold text-green-800 mb-4">Scanner pour ouvrir sur un autre appareil</p>
               <div className="flex justify-center">
-                <QRCode value={qrValue} size={180} />
+                <div className="bg-white p-6 rounded-lg border-2 border-gray-200 inline-block">
+                  <QRCode 
+                    value={qrValue} 
+                    size={320}
+                    level="H"
+                    fgColor="#000000"
+                    bgColor="#FFFFFF"
+                  />
+                </div>
               </div>
-              <p className="text-xs text-gray-600 mt-2 break-words font-mono">{qrValue}</p>
-              <p className="text-xs text-blue-600 mt-2">
+              <p className="text-xs text-gray-600 mt-4 break-words font-mono bg-gray-50 p-2 rounded">{qrValue}</p>
+              <p className="text-xs text-blue-600 mt-3">
                 ⚠️ Assurez-vous que votre téléphone est sur le même réseau Wi-Fi
+              </p>
+              <p className="text-xs text-gray-500 mt-2">
+                💡 Si le scan ne fonctionne pas, tapez l'URL manuellement dans votre navigateur
               </p>
             </div>
           )}

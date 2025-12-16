@@ -217,18 +217,30 @@ def list_hse_users(request):
     users = HSEUser.objects.all()
     
     if search:
+        # Normaliser la recherche (supprimer espaces)
+        search_clean = search.strip()
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"[SEARCH] Recherche exacte avec terme: '{search_clean}'")
+        
+        # Recherche exacte dans tous les champs pertinents (correspondance complète uniquement)
         users = users.filter(
-            Q(nom__icontains=search) |
-            Q(prénom__icontains=search) |
-            Q(cin__icontains=search) |
-            Q(email__icontains=search)
+            Q(nom__iexact=search_clean) |
+            Q(prénom__iexact=search_clean) |
+            Q(cin__iexact=search_clean) |
+            Q(entreprise__iexact=search_clean) |
+            Q(entite__iexact=search_clean) |
+            Q(chef_projet_ocp__iexact=search_clean)
         )
+        
+        count_before_pagination = users.count()
+        logger.info(f"[SEARCH] Nombre de résultats trouvés: {count_before_pagination}")
     
     if entreprise:
-        users = users.filter(entreprise__icontains=entreprise)
+        users = users.filter(entreprise__iexact=entreprise)
     
     if entite:
-        users = users.filter(entite__icontains=entite)
+        users = users.filter(entite__iexact=entite)
     
     if presence is not None:
         users = users.filter(presence=(presence.lower() == 'true'))
@@ -443,27 +455,41 @@ def submit_hse_test_answers(request, attempt_id):
                 if is_correct:
                     optional_correct += 1
                                     
-        # Calculer le total des questions obligatoires
-        total_mandatory = len(mandatory_ids) if mandatory_ids else 0
-        if total_mandatory == 0:
-            # Si aucune question n'est marquée comme obligatoire dans le test,
-            # compter celles avec is_mandatory=True
-            for question_id_str in user_answers.keys():
-                try:
-                    question_id = int(question_id_str)
-                    question = Question.objects.get(id=question_id)
-                    if question.is_mandatory:
-                        total_mandatory += 1
-                except (Question.DoesNotExist, ValueError):
-                    continue
+        # Calculer le total des questions obligatoires RÉPONDUES par l'utilisateur
+        # On ne compte que les questions obligatoires présentes dans user_answers
+        total_mandatory = 0
+        for question_id_str in user_answers.keys():
+            try:
+                question_id = int(question_id_str)
+                question = Question.objects.get(id=question_id)
+                # Déterminer si la question est obligatoire :
+                # 1. Si elle est dans mandatory_questions du test
+                # 2. Sinon, si is_mandatory de la question est True
+                is_mandatory_question = question_id in mandatory_ids or question.is_mandatory
+                if is_mandatory_question:
+                    total_mandatory += 1
+            except (Question.DoesNotExist, ValueError):
+                continue
+        
+        # Calculer le total des questions optionnelles répondues
+        total_optional = 0
+        for question_id_str in user_answers.keys():
+            try:
+                question_id = int(question_id_str)
+                question = Question.objects.get(id=question_id)
+                is_mandatory_question = question_id in mandatory_ids or question.is_mandatory
+                if not is_mandatory_question:
+                    total_optional += 1
+            except (Question.DoesNotExist, ValueError):
+                continue
         
         # Mettre à jour les scores
         attempt.mandatory_correct = mandatory_correct
         attempt.mandatory_wrong = total_mandatory - mandatory_correct
         attempt.mandatory_total = total_mandatory
         attempt.optional_correct = optional_correct
-        attempt.optional_wrong = test.total_questions - total_mandatory - optional_correct
-        attempt.optional_total = test.total_questions - total_mandatory
+        attempt.optional_wrong = total_optional - optional_correct
+        attempt.optional_total = total_optional
         attempt.mandatory_score_percentage = round((mandatory_correct / total_mandatory * 100), 2) if total_mandatory > 0 else 0
         attempt.optional_score_percentage = round((optional_correct / attempt.optional_total * 100), 2) if attempt.optional_total > 0 else 0
         attempt.overall_score_percentage = round(((mandatory_correct + optional_correct) / test.total_questions * 100), 2) if test.total_questions > 0 else 0

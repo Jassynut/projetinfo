@@ -10,6 +10,7 @@ export default function SelectionTest() {
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [etat, setEtat] = useState('test_final'); // État du test (initial ou final)
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -43,7 +44,9 @@ export default function SelectionTest() {
     }
     console.log("Version sélectionnée:", selected);
     console.log("ID du test sauvegardé:", testId);
+    console.log("État du test:", etat);
     localStorage.setItem("selectedTestVersion", String(testId));
+    localStorage.setItem("selectedTestEtat", etat); // Stocker l'état choisi
     navigate("/test/commencer");
   };
 
@@ -64,6 +67,42 @@ export default function SelectionTest() {
         {error && <p className="text-red-600 mb-3">{error}</p>}
 
         {loading && <p className="text-gray-600">Chargement des versions...</p>}
+
+        {/* Choix du type de test (Initial/Final) */}
+        <div className="mb-6 p-4 bg-green-50 rounded-lg border border-green-200">
+          <label className="block text-green-700 font-semibold mb-3">
+            Type de test :
+          </label>
+          <div className="flex gap-4">
+            <label className="flex items-center cursor-pointer">
+              <input
+                type="radio"
+                name="etat"
+                value="test_initial"
+                checked={etat === 'test_initial'}
+                onChange={(e) => setEtat(e.target.value)}
+                className="mr-2 w-4 h-4 text-green-600 focus:ring-green-500"
+              />
+              <span className="text-gray-700">Test Initial</span>
+            </label>
+            <label className="flex items-center cursor-pointer">
+              <input
+                type="radio"
+                name="etat"
+                value="test_final"
+                checked={etat === 'test_final'}
+                onChange={(e) => setEtat(e.target.value)}
+                className="mr-2 w-4 h-4 text-green-600 focus:ring-green-500"
+              />
+              <span className="text-gray-700">Test Final</span>
+            </label>
+          </div>
+          <p className="text-sm text-gray-600 mt-2">
+            {etat === 'test_initial' 
+              ? "Les tests initiaux ne génèrent pas de certificat." 
+              : "Les tests finaux peuvent générer un certificat si réussi."}
+          </p>
+        </div>
 
         <div className="grid gap-4 md:grid-cols-2">
           {versions.map((v) => {

@@ -165,6 +165,58 @@ export default function ModifierVersion() {
     }
   };
 
+  const handleAddAllQuestions = async () => {
+    if (availableQuestions.length === 0) {
+      alert("Aucune question disponible à ajouter.");
+      return;
+    }
+
+    if (!confirm(`Voulez-vous ajouter toutes les ${availableQuestions.length} question(s) disponible(s) dans l'ordre des ID ?`)) {
+      return;
+    }
+
+    try {
+      // Trier les questions disponibles par ID
+      const sortedQuestions = [...availableQuestions].sort((a, b) => {
+        const idA = typeof a.id === 'string' ? parseInt(a.id, 10) : a.id;
+        const idB = typeof b.id === 'string' ? parseInt(b.id, 10) : b.id;
+        return idA - idB;
+      });
+
+      // Récupérer l'ordre actuel
+      const currentOrder = (version?.ordre_questions || []).map(id => 
+        typeof id === 'string' ? parseInt(id, 10) : id
+      );
+
+      // Ajouter toutes les questions dans l'ordre des ID
+      const newOrder = [...currentOrder];
+      for (const question of sortedQuestions) {
+        const qId = typeof question.id === 'string' ? parseInt(question.id, 10) : question.id;
+        if (!newOrder.includes(qId)) {
+          newOrder.push(qId);
+        }
+      }
+
+      // Sauvegarder dans la base de données
+      const response = await axios.patch(`${API_BASE}/api/versions/${versionId}/update-order/`, {
+        ordre_questions: newOrder
+      });
+
+      // Mettre à jour l'état
+      const confirmedOrder = response.data?.ordre_questions || newOrder;
+      setVersion({ ...version, ordre_questions: confirmedOrder });
+
+      // Recharger les questions de la version
+      await fetchVersion();
+      
+      alert(`${sortedQuestions.length} question(s) ajoutée(s) avec succès !`);
+    } catch (err) {
+      console.error("Erreur ajout toutes les questions:", err);
+      const errorMsg = err.response?.data?.error || err.message || "Erreur de connexion au serveur";
+      alert(`Erreur lors de l'ajout des questions: ${errorMsg}`);
+    }
+  };
+
   const handleAddQuestion = async () => {
     if (!selectedQuestionId) {
       alert("Veuillez sélectionner une question.");
@@ -401,37 +453,21 @@ export default function ModifierVersion() {
           )}
         </div>
 
-        {/* Ajouter une question */}
+        {/* Ajouter toutes les questions */}
         <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-          <h3 className="text-lg font-semibold text-green-800 mb-3">Ajouter une question existante :</h3>
-          <div className="flex gap-3">
-            <select
-              value={selectedQuestionId}
-              onChange={(e) => setSelectedQuestionId(e.target.value)}
-              className="flex-1 border rounded-lg p-2"
-            >
-              <option value="">-- Sélectionner une question --</option>
-              {availableQuestions.length === 0 ? (
-                <option value="" disabled>
-                  Aucune question disponible (toutes les questions sont déjà dans cette version)
-                </option>
-              ) : (
-                availableQuestions.map((q) => {
-                  // S'assurer que l'ID est bien un nombre pour la valeur
-                  const questionId = typeof q.id === 'string' ? parseInt(q.id, 10) : q.id;
-                  return (
-                    <option key={q.id} value={questionId}>
-                      {q.question_code || `Q${q.id}`}: {q.enonce_fr || q.text || "Question sans texte"}
-                    </option>
-                  );
-                })
-              )}
-            </select>
+          <h3 className="text-lg font-semibold text-green-800 mb-3">Ajouter des questions :</h3>
+          <div className="flex gap-3 items-center">
+            <p className="flex-1 text-gray-700">
+              {availableQuestions.length > 0 
+                ? `${availableQuestions.length} question(s) disponible(s) à ajouter`
+                : "Toutes les questions sont déjà dans cette version"}
+            </p>
             <button
-              onClick={handleAddQuestion}
-              className="bg-green-700 text-white px-4 py-2 rounded-lg hover:bg-green-800"
+              onClick={handleAddAllQuestions}
+              disabled={availableQuestions.length === 0}
+              className="bg-green-700 text-white px-6 py-2 rounded-lg hover:bg-green-800 disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
-              Ajouter
+              Ajouter toutes les questions (ordre ID)
             </button>
           </div>
         </div>

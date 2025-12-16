@@ -15,7 +15,7 @@ class TestListSerializer(serializers.ModelSerializer):
             'id', 'version', 'description', 'duration_minutes',
             'total_questions', 'mandatory_questions_count', 
             'passing_score_optional', 'questions_count',
-            'ordre_questions', 'is_active', 'created_at'
+            'ordre_questions', 'is_active', 'etat', 'created_at'
         ]
     
     def get_questions_count(self, obj):
@@ -34,7 +34,7 @@ class TestDetailSerializer(serializers.ModelSerializer):
             'id', 'version', 'description', 'duration_minutes',
             'total_questions', 'mandatory_questions_count',
             'passing_score_optional', 'questions_count',
-            'optional_questions_count', 'is_active',
+            'optional_questions_count', 'is_active', 'etat',
             'questions', 'mandatory_questions_list', 'optional_questions_list',
             'ordre_questions', 'mandatory_questions',
             'created_at', 'updated_at'
@@ -62,7 +62,7 @@ class TestCreateUpdateSerializer(serializers.ModelSerializer):
             'version', 'description', 'duration_minutes',
             'total_questions', 'mandatory_questions_count',
             'passing_score_optional', 'ordre_questions',
-            'mandatory_questions', 'is_active'
+            'mandatory_questions', 'is_active', 'etat'
         ]
     
     def validate_version(self, value):
@@ -81,7 +81,7 @@ class TestAttemptListSerializer(serializers.ModelSerializer):
         model = TestAttempt
         fields = [
             'id', 'test_version', 'user_cin', 'user_name',
-            'langue', 'status', 'mandatory_score_percentage',
+            'langue', 'status', 'etat', 'mandatory_score_percentage',
             'optional_score_percentage', 'overall_score_percentage',
             'passed', 'started_at', 'completed_at', 'time_taken_seconds'
         ]
@@ -101,7 +101,7 @@ class TestAttemptDetailSerializer(serializers.ModelSerializer):
         model = TestAttempt
         fields = [
             'id', 'test_version', 'user_cin', 'user_name',
-            'langue', 'status', 'mandatory_correct', 'mandatory_wrong',
+            'langue', 'status', 'etat', 'mandatory_correct', 'mandatory_wrong',
             'mandatory_total', 'optional_correct', 'optional_wrong',
             'optional_total', 'mandatory_score_percentage',
             'optional_score_percentage', 'overall_score_percentage',

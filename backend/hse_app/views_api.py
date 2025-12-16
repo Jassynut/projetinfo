@@ -65,17 +65,18 @@ class HSEUserViewSet(viewsets.ModelViewSet):
         
         cin = self.request.query_params.get('cin')
         if cin:
-            queryset = queryset.filter(cin__icontains=cin)
+            # Recherche exacte pour le CIN
+            queryset = queryset.filter(cin__iexact=cin)
         
-        # Filtrer par entité
+        # Filtrer par entité (correspondance exacte)
         entite = self.request.query_params.get('entite')
         if entite:
-            queryset = queryset.filter(entite__icontains=entite)
+            queryset = queryset.filter(entite__iexact=entite)
         
-        # Filtrer par entreprise
+        # Filtrer par entreprise (correspondance exacte)
         entreprise = self.request.query_params.get('entreprise')
         if entreprise:
-            queryset = queryset.filter(entreprise__icontains=entreprise)
+            queryset = queryset.filter(entreprise__iexact=entreprise)
         
         # Filtrer par présence
         presence = self.request.query_params.get('presence')

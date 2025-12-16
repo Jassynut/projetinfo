@@ -59,7 +59,7 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
       args:
-        VITE_API_URL: ${VITE_API_URL:-http://10.24.159.24:8000}
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
     container_name: hse_frontend
     restart: unless-stopped
     ports:

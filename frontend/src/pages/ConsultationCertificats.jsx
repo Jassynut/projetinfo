@@ -164,7 +164,7 @@ export default function ConsultationCertificats() {
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm text-gray-600">
                           <p>Date: {new Date(cert.date_test).toLocaleDateString('fr-FR')}</p>
                           <p>Score: {cert.score_sur_21}/21 ({Math.round(cert.score)}%)</p>
-                          <p>Durée: {cert.time_taken_minutes} min</p>
+                          <p>Durée: {cert.time_taken_minutes > 0 ? `${cert.time_taken_minutes} min` : 'N/A'}</p>
                         </div>
                       </div>
                       <button
