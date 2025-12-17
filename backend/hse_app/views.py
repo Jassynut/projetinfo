@@ -499,12 +499,16 @@ def submit_hse_test_answers(request, attempt_id):
         attempt.save()
         
         # Mettre à jour sensibilise_avec_succes si le test est réussi
+        # IMPORTANT: sensibilise_avec_succes doit être mis à True UNIQUEMENT pour les tests finaux
         if attempt.passed:
             try:
                 # Trouver l'utilisateur HSE correspondant via le CIN
                 hse_user = HSEUser.objects.get(cin=attempt.user.cin)
-                hse_user.sensibilise_avec_succes = True
-                hse_user.save(update_fields=['sensibilise_avec_succes'])
+                # Ne mettre à jour sensibilise_avec_succes que si c'est un test final
+                if hasattr(attempt, 'etat') and attempt.etat == 'test_final':
+                    hse_user.sensibilise_avec_succes = True
+                    hse_user.save(update_fields=['sensibilise_avec_succes'])
+                # Si c'est un test initial, ne pas modifier sensibilise_avec_succes
             except HSEUser.DoesNotExist:
                 # L'utilisateur HSE n'existe pas encore, ce n'est pas grave
                 pass
@@ -613,10 +617,10 @@ def start_hse_test_attempt(request):
                 is_mandatory = str(question.id) in [str(qid) for qid in test.mandatory_questions]
                 
                 # Pour le test, on ne montre pas la réponse correcte
-                # Construire l'URL complète de l'image
+                # Construire l'URL relative de l'image (nginx proxifiera)
                 image_url = None
                 if question.image:
-                    image_url = request.build_absolute_uri(question.image.url)
+                    image_url = question.image.url  # Chemin relatif: /media/questions/hse/...
                 
                 question_display = {
                     'id': question.id,

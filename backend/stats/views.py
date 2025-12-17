@@ -65,68 +65,124 @@ def hse_stats(request):
     pour le frontend React.
     Utilise les données de la base de données (HSEUser et TestAttempt).
     """
-
-    # 1️⃣ Lire la date passée dans l'URL
-    day = request.GET.get("day")
-    month = request.GET.get("month")
-    year = request.GET.get("year")
-
-    # 2️⃣ Si aucune date → date d'aujourd'hui
-    if not (day and month and year):
-        today = datetime.date.today()
-        day = today.day
-        month = today.month
-        year = today.year
-    else:
-        day = int(day)
-        month = int(month)
-        year = int(year)
-
     try:
-        selected_date = datetime.date(year, month, day)
-    except ValueError:
-        return JsonResponse({
-            "error": "Date invalide"
-        }, status=400)
+        # 1️⃣ Lire la date passée dans l'URL
+        day = request.GET.get("day")
+        month = request.GET.get("month")
+        year = request.GET.get("year")
 
-    # 3️⃣ Importer les modèles
-    from hse_app.models import HSEUser
-    from tests.models import TestAttempt
-    
-    # 4️⃣ Calculer le pourcentage de présence pour le jour sélectionné
-    users_for_date = HSEUser.objects.filter(date_ajout=selected_date)
-    total_users = users_for_date.count()
-    present_users = users_for_date.filter(presence=True).count()
-    presence_percentage = (present_users / total_users * 100) if total_users > 0 else 0
-    
-    # 5️⃣ Calculer la moyenne des tests pour le jour sélectionné
-    # Filtrer uniquement les tests terminés pendant ce jour (completed_at à cette date)
-    attempts_for_date = TestAttempt.objects.filter(
-        completed_at__date=selected_date,
-        completed_at__isnull=False,
-        status__in=['passed', 'failed']
-    )
-    total_attempts = attempts_for_date.count()
-    
-    if total_attempts > 0:
-        # Calculer la moyenne des scores globaux (overall_score_percentage)
-        total_score = sum(attempt.overall_score_percentage for attempt in attempts_for_date)
-        average_test_score = total_score / total_attempts
-    else:
-        average_test_score = 0
-    
-    # 6️⃣ Retour JSON parfait pour React
-    return JsonResponse({
-        "presence": round(presence_percentage, 2),
-        "presence_count": present_users,
-        "total_users": total_users,
-        "average_test_score": round(average_test_score, 2),
-        "total_attempts": total_attempts,
-        "test_initial": 0,  # Pour compatibilité avec l'ancien code
-        "test_final": round(average_test_score, 2),
-        "improvement": round(average_test_score, 2),
-        "date": selected_date.isoformat()
-    })
+        # 2️⃣ Si aucune date → date d'aujourd'hui
+        if not (day and month and year):
+            today = datetime.date.today()
+            day = today.day
+            month = today.month
+            year = today.year
+        else:
+            try:
+                day = int(day)
+                month = int(month)
+                year = int(year)
+            except (ValueError, TypeError):
+                return JsonResponse({
+                    "error": "Date invalide",
+                    "presence": 0,
+                    "test_initial": 0,
+                    "test_final": 0
+                }, status=400)
+
+        try:
+            selected_date = datetime.date(year, month, day)
+        except ValueError:
+            return JsonResponse({
+                "error": "Date invalide",
+                "presence": 0,
+                "test_initial": 0,
+                "test_final": 0
+            }, status=400)
+
+        # 3️⃣ Importer les modèles
+        from hse_app.models import HSEUser
+        from tests.models import TestAttempt
+        
+        # 4️⃣ Calculer le pourcentage de présence pour le jour sélectionné
+        # Compter tous les utilisateurs ajoutés à cette date (ou avant cette date pour inclure tous les utilisateurs pertinents)
+        try:
+            # Filtrer les utilisateurs ajoutés à cette date
+            users_for_date = HSEUser.objects.filter(date_ajout=selected_date)
+            total_users = users_for_date.count()
+            
+            # Compter ceux qui ont presence=True
+            # Utiliser .filter() avec presence=True pour s'assurer que le filtre fonctionne correctement
+            present_users = users_for_date.filter(presence=True).count()
+            
+            # Debug: afficher les valeurs pour vérifier
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"[STATS] Date: {selected_date}, Total users: {total_users}, Present users: {present_users}")
+            
+            # S'assurer que presence_percentage est toujours un nombre
+            if total_users > 0:
+                presence_percentage = (present_users / total_users) * 100
+            else:
+                presence_percentage = 0.0
+        except Exception as e:
+            # En cas d'erreur, retourner 0
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Erreur calcul présence: {str(e)}")
+            presence_percentage = 0.0
+            total_users = 0
+            present_users = 0
+        
+        # 5️⃣ Calculer la moyenne des tests pour le jour sélectionné
+        # Filtrer uniquement les tests terminés pendant ce jour (completed_at à cette date)
+        try:
+            attempts_for_date = TestAttempt.objects.filter(
+                completed_at__date=selected_date,
+                completed_at__isnull=False,
+                status__in=['passed', 'failed']
+            )
+            total_attempts = attempts_for_date.count()
+            
+            if total_attempts > 0:
+                # Calculer la moyenne des scores globaux (overall_score_percentage)
+                total_score = sum(attempt.overall_score_percentage or 0 for attempt in attempts_for_date)
+                average_test_score = total_score / total_attempts
+            else:
+                average_test_score = 0.0
+        except Exception as e:
+            # En cas d'erreur, retourner 0
+            average_test_score = 0.0
+            total_attempts = 0
+        
+        # 6️⃣ Retour JSON parfait pour React - s'assurer que toutes les valeurs sont des nombres
+        return JsonResponse({
+            "presence": float(round(presence_percentage, 2)),
+            "presence_count": int(present_users),
+            "total_users": int(total_users),
+            "average_test_score": float(round(average_test_score, 2)),
+            "total_attempts": int(total_attempts),
+            "test_initial": 0.0,  # Pour compatibilité avec l'ancien code
+            "test_final": float(round(average_test_score, 2)),
+            "improvement": float(round(average_test_score, 2)),
+            "date": selected_date.isoformat()
+        })
+    except Exception as e:
+        # Gestion d'erreur globale
+        import traceback
+        print(f"Erreur dans hse_stats: {str(e)}")
+        print(traceback.format_exc())
+        return JsonResponse({
+            "error": "Erreur serveur",
+            "presence": 0,
+            "presence_count": 0,
+            "total_users": 0,
+            "average_test_score": 0,
+            "total_attempts": 0,
+            "test_initial": 0,
+            "test_final": 0,
+            "improvement": 0
+        }, status=500)
 
 
 # ------------------------------

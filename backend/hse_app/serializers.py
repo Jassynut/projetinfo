@@ -92,10 +92,9 @@ class QuestionDetailSerializer(serializers.ModelSerializer):
     
     def get_image_url(self, obj):
         if obj.image:
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(obj.image.url)
-            return obj.image.url
+            # Retourner un chemin relatif pour que nginx puisse proxifier correctement
+            # Le frontend construira l'URL complète avec API_BASE
+            return obj.image.url  # Ex: /media/questions/hse/image.jpg
         return None
 
 

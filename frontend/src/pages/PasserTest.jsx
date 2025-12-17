@@ -189,6 +189,8 @@ export default function PasserTest() {
       await axios.post(`${API_BASE}/api/test/${id}/reponse`, {
         question_id: questionId,
         answer: value,
+      }, {
+        withCredentials: true
       });
     } catch (err) {
       // silencieux, l'enregistrement final gèrera
@@ -229,6 +231,8 @@ export default function PasserTest() {
         cin: currentCin.toUpperCase(),
         langue: selectedLanguage,
         etat: testEtat,
+      }, {
+        withCredentials: true
       });
       
       // Stocker les données du résultat dans sessionStorage pour la page de résultat
@@ -364,7 +368,7 @@ export default function PasserTest() {
                 <img
                   src={currentQuestion.image_url.startsWith('http') 
                     ? currentQuestion.image_url 
-                    : `${API_BASE}${currentQuestion.image_url}`}
+                    : `${API_BASE}${currentQuestion.image_url.startsWith('/') ? '' : '/'}${currentQuestion.image_url}`}
                   alt="illustration"
                   className="w-full max-h-64 object-contain rounded mb-4"
                   onError={(e) => {

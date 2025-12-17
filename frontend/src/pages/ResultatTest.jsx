@@ -118,8 +118,8 @@ export default function ResultatTest() {
                 </p>
 
                 <div className="flex flex-col md:flex-row md:justify-center gap-3 mb-6">
-                  {/* Afficher le bouton de téléchargement si le test est réussi (certificat généré automatiquement) */}
-                  {data?.passed === true && (
+                  {/* Afficher le bouton de téléchargement UNIQUEMENT si le test est réussi ET si c'est un test final */}
+                  {data?.passed === true && data?.etat === 'test_final' && (
                     <button
                       className="bg-blue-600 text-white px-5 py-3 rounded-lg shadow hover:bg-blue-700 flex items-center gap-2"
                       onClick={handleDownload}

@@ -1,11 +1,14 @@
 from rest_framework import viewsets, status, permissions
-from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.decorators import action, api_view, permission_classes, authentication_classes
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
+from rest_framework.authentication import SessionAuthentication
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.core.cache import cache
 from django.db import IntegrityError
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
 
 from .models import Test, TestAttempt, Question
 from .serializers_api import (
@@ -214,11 +217,12 @@ class TestAttemptViewSet(viewsets.ModelViewSet):
         attempt.save()
         
         # Mettre à jour le score et sensibilise_avec_succes de l'utilisateur HSE si lié
-        if attempt.passed:
+        # IMPORTANT: sensibilise_avec_succes doit être mis à True UNIQUEMENT pour les tests finaux
+        if attempt.passed and attempt.etat == 'test_final':
             try:
                 # Trouver l'utilisateur HSE correspondant via le CIN
                 hse_user = HSEUser.objects.get(cin=attempt.user.cin)
-                # Mettre à jour sensibilise_avec_succes si le test est réussi
+                # Mettre à jour sensibilise_avec_succes UNIQUEMENT si c'est un test final réussi
                 hse_user.sensibilise_avec_succes = True
                 # Score = (pourcentage / 100) * 21 (si le champ existe)
                 if hasattr(hse_user, 'score'):
@@ -558,27 +562,42 @@ def test_questions_public(request, test_id):
     return Response({'questions': serializer.data, 'test_id': test.id, 'version': test.version})
 
 
+@csrf_exempt
 @api_view(['POST'])
+@authentication_classes([])  # Disable authentication (and thus CSRF) for this view
 @permission_classes([permissions.AllowAny])
 def test_submit_answer(request, test_id):
     # Stockage léger en cache par session key
+    # Ensure session is created if it doesn't exist
+    if not request.session.session_key:
+        request.session.create()
+    
     question_id = request.data.get('question_id')
     answer = request.data.get('answer')
     if question_id is None:
         return Response({'success': False, 'error': 'question_id requis'}, status=400)
-    cache_key = f"test_answers:{request.session.session_key}:{test_id}"
+    
+    # Use a fallback key if session_key is still None
+    session_key = request.session.session_key or 'anonymous'
+    cache_key = f"test_answers:{session_key}:{test_id}"
     answers = cache.get(cache_key, {})
     answers[str(question_id)] = {'answer': answer}
     cache.set(cache_key, answers, 60 * 30)
     return Response({'success': True})
 
 
+@csrf_exempt
 @api_view(['POST'])
+@authentication_classes([])  # Disable authentication (and thus CSRF) for this view
 @permission_classes([permissions.AllowAny])
 def test_finish_public(request, test_id):
     from django.utils import timezone
     from authentication.models import TestUser
     from hse_app.models import HSEUser
+    
+    # Ensure session is created if it doesn't exist
+    if not request.session.session_key:
+        request.session.create()
     
     test = get_object_or_404(Test, id=test_id)
     provided_answers = request.data.get('answers') or {}
@@ -588,7 +607,9 @@ def test_finish_public(request, test_id):
     # Utiliser l'état fourni, sinon celui du test, sinon test_final par défaut
     etat = request.data.get('etat', getattr(test, 'etat', 'test_final'))
     
-    cache_key = f"test_answers:{request.session.session_key}:{test_id}"
+    # Use a fallback key if session_key is still None
+    session_key = request.session.session_key or 'anonymous'
+    cache_key = f"test_answers:{session_key}:{test_id}"
     cached_answers = cache.get(cache_key, {})
     # merge (answers payload has priority)
     cached_answers.update(provided_answers)
@@ -748,9 +769,14 @@ def test_finish_public(request, test_id):
                 attempt.save()
             
             # Mettre à jour sensibilise_avec_succes dans HSEUser
+            # IMPORTANT: sensibilise_avec_succes doit être mis à True UNIQUEMENT pour les tests finaux
             try:
-                hse_user.sensibilise_avec_succes = passed
-                hse_user.save(update_fields=['sensibilise_avec_succes'])
+                # Ne mettre à jour sensibilise_avec_succes que si c'est un test final ET réussi
+                if etat == 'test_final' and passed:
+                    hse_user.sensibilise_avec_succes = True
+                    hse_user.save(update_fields=['sensibilise_avec_succes'])
+                # Si c'est un test initial, ne pas modifier sensibilise_avec_succes
+                # (il reste False ou conserve sa valeur précédente)
             except Exception as e:
                 import logging
                 logger = logging.getLogger(__name__)
@@ -848,7 +874,8 @@ def test_finish_public(request, test_id):
             pass
     
     # Stocker aussi dans le cache pour compatibilité
-    cache.set(f"test_result:{request.session.session_key}:{test_id}", {
+    result_cache_key = f"test_result:{session_key}:{test_id}"
+    cache.set(result_cache_key, {
         'score': total_score,
         'mandatory_correct': mandatory_correct,
         'optional_correct': optional_correct,
@@ -858,7 +885,8 @@ def test_finish_public(request, test_id):
         'certificate_id': certificate_id_for_cache,
         'total_questions': test.total_questions,
         'mandatory_total': total_mandatory,
-        'optional_total': total_optional
+        'optional_total': total_optional,
+        'etat': attempt.etat if attempt else etat  # Inclure l'état dans le cache
     }, 60 * 30)
     cache.delete(cache_key)
 
@@ -917,14 +945,22 @@ def test_finish_public(request, test_id):
         'attempt_id': attempt.id if attempt else None,
         'certificate_id': certificate_id,
         'cin': cin if cin else None,
+        'etat': attempt.etat if attempt else etat,  # Inclure l'état du test
         'message': 'Test enregistré avec succès'
     })
 
 
 @api_view(['GET'])
+@authentication_classes([])  # Disable authentication for this view
 @permission_classes([permissions.AllowAny])
 def test_result_public(request, test_id):
-    data = cache.get(f"test_result:{request.session.session_key}:{test_id}")
+    # Ensure session is created if it doesn't exist
+    if not request.session.session_key:
+        request.session.create()
+    
+    # Use a fallback key if session_key is still None
+    session_key = request.session.session_key or 'anonymous'
+    data = cache.get(f"test_result:{session_key}:{test_id}")
     if not data:
         return Response({'success': False, 'error': 'Résultat indisponible'}, status=404)
     return Response({
@@ -940,6 +976,7 @@ def test_result_public(request, test_id):
         'optional_total': data.get('optional_total'),
         'total_questions': data.get('total_questions'),
         'overall_score_percentage': data.get('overall_score_percentage'),
+        'etat': data.get('etat'),  # Inclure l'état du test
     })
 
 

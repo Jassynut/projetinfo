@@ -21,13 +21,23 @@ export default function DashboardHSE() {
         params: { day: d, month: m, year: y }
       });
 
-      setPresence(response.data.presence);
-      setInitialTest(response.data.test_initial);
-      setFinalTest(response.data.test_final);
+      // Gérer les cas où les valeurs peuvent être undefined ou null
+      const presenceValue = response.data?.presence ?? 0;
+      const initialTestValue = response.data?.test_initial ?? 0;
+      const finalTestValue = response.data?.test_final ?? 0;
+
+      setPresence(presenceValue);
+      setInitialTest(initialTestValue);
+      setFinalTest(finalTestValue);
 
     } catch (err) {
-      console.error(err);
-      alert("Aucune donnée pour cette date.");
+      console.error("Erreur de connexion:", err);
+      console.error("Détails:", err.response?.data);
+      // Réinitialiser les valeurs en cas d'erreur
+      setPresence(0);
+      setInitialTest(0);
+      setFinalTest(0);
+      alert("Erreur lors du chargement des statistiques. Vérifiez votre connexion.");
     }
   };
 
@@ -71,7 +81,7 @@ export default function DashboardHSE() {
         <div className="bg-white p-8 rounded-xl shadow text-center">
           <h2 className="text-xl font-semibold mb-4">Pourcentage de présences</h2>
           <p className="text-5xl font-bold text-green-700">
-            {presence !== null ? presence + "%" : "..."}
+            {presence !== null && presence !== undefined ? Number(presence).toFixed(2) + "%" : "..."}
           </p>
         </div>
 

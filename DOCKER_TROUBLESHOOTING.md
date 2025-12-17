@@ -85,3 +85,75 @@ docker-compose logs frontend
 docker-compose logs db
 ```
 
+## Erreur : "failed to resolve source metadata for docker.io/library/python"
+
+### Problème de connectivité réseau avec Docker Hub
+
+Cette erreur indique que Docker ne peut pas se connecter à Docker Hub pour télécharger les images.
+
+### Solutions :
+
+#### Solution 1 : Vérifier la connexion Internet
+```powershell
+# Tester la connectivité
+ping google.com
+ping registry-1.docker.io
+```
+
+#### Solution 2 : Configurer un proxy dans Docker Desktop (si vous êtes derrière un proxy)
+1. Ouvrez **Docker Desktop**
+2. Allez dans **Settings** (Paramètres)
+3. Cliquez sur **Resources** → **Proxies**
+4. Configurez votre proxy HTTP/HTTPS si nécessaire
+5. Cliquez sur **Apply & Restart**
+
+#### Solution 3 : Utiliser un miroir Docker Hub (si Docker Hub est bloqué)
+Créez ou modifiez le fichier `C:\Users\<VotreNom>\.docker\daemon.json` :
+```json
+{
+  "registry-mirrors": [
+    "https://docker.mirrors.ustc.edu.cn",
+    "https://hub-mirror.c.163.com"
+  ]
+}
+```
+Puis redémarrez Docker Desktop.
+
+#### Solution 4 : Vérifier les paramètres DNS
+1. Ouvrez **Docker Desktop**
+2. Allez dans **Settings** → **Docker Engine**
+3. Ajoutez des DNS personnalisés :
+```json
+{
+  "dns": ["8.8.8.8", "8.8.4.4"]
+}
+```
+4. Cliquez sur **Apply & Restart**
+
+#### Solution 5 : Désactiver temporairement le pare-feu/antivirus
+- Vérifiez si votre pare-feu Windows ou antivirus bloque Docker
+- Ajoutez Docker Desktop aux exceptions du pare-feu
+
+#### Solution 6 : Utiliser une image déjà téléchargée localement
+Si vous avez déjà l'image Python sur votre machine :
+```powershell
+# Vérifier les images locales
+docker images | findstr python
+
+# Si l'image existe, le build devrait fonctionner
+docker-compose build backend
+```
+
+#### Solution 7 : Télécharger l'image manuellement
+```powershell
+# Essayer de pull l'image directement
+docker pull python:3.11-slim
+
+# Si cela fonctionne, relancer le build
+docker-compose build backend
+```
+
+#### Solution 8 : Utiliser un VPN ou changer de réseau
+- Si vous êtes sur un réseau d'entreprise qui bloque Docker Hub, essayez un VPN
+- Ou connectez-vous à un autre réseau (WiFi personnel, partage de connexion mobile)
+
