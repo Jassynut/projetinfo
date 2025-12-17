@@ -12,31 +12,12 @@ export default function CommencerTest() {
   
   // Construire l'URL pour le QR code - TOUJOURS utiliser l'IP locale pour que les téléphones puissent y accéder
   const getFrontendUrl = () => {
-    // Toujours utiliser l'IP locale pour que les téléphones puissent y accéder
-    const currentPort = window.location.port;
-    const isDevMode = currentPort === '5173' || currentPort === ''; // Vite dev server ou Docker
+    // TOUJOURS utiliser l'IP locale pour le QR code, peu importe comment on accède à la page
+    // Car le téléphone doit pouvoir y accéder depuis le réseau local
+    const ipLocale = '10.24.159.13';
+    const port = '3000'; // Port fixe pour Docker
     
-    // Déterminer le port du frontend
-    let frontendPort = '3000'; // Port Docker par défaut
-    if (isDevMode && currentPort === '5173') {
-      frontendPort = '5173'; // Mode développement local
-    }
-    
-    // Extraire l'IP du backend ou utiliser l'IP locale par défaut
-    try {
-      const apiUrl = new URL(API_BASE);
-      const backendHost = apiUrl.hostname;
-      
-      // Si l'API utilise localhost, utiliser l'IP locale par défaut
-      if (backendHost === 'localhost' || backendHost === '127.0.0.1') {
-        return `http://10.24.159.24:${frontendPort}`;
-      }
-      // Sinon utiliser le même hostname que le backend
-      return `http://${backendHost}:${frontendPort}`;
-    } catch (e) {
-      // Fallback : utiliser l'IP locale par défaut (IP de la machine)
-      return `http://10.24.159.24:${frontendPort}`;
-    }
+    return `http://${ipLocale}:${port}`;
   };
   
   const frontendUrl = useMemo(() => getFrontendUrl(), []);

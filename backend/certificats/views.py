@@ -16,7 +16,8 @@ def download_certificate(request, user_id, test_id):
     """Télécharger un certificat existant (ancien endpoint)"""
     try:
         user = TestUser.objects.get(id=user_id)
-        attempt = TestAttempt.objects.get(user=user, test_id=test_id)
+        # Uniquement les tests finaux peuvent avoir des certificats
+        attempt = TestAttempt.objects.get(user=user, test_id=test_id, etat='test_final')
 
         html_string = render_to_string('certificate.html', {
             'full_name': user.get_full_name(),
@@ -51,6 +52,13 @@ def generate_certificate(request, attempt_id):
             return JsonResponse({
                 'success': False,
                 'error': 'Le test n\'a pas été réussi'
+            }, status=400)
+        
+        # Vérifier que c'est un test final (les tests initiaux ne génèrent pas de certificats)
+        if attempt.etat != 'test_final':
+            return JsonResponse({
+                'success': False,
+                'error': 'Les certificats sont uniquement générés pour les tests finaux'
             }, status=400)
         
         # Vérifier si un certificat existe déjà

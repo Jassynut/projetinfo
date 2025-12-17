@@ -198,7 +198,7 @@ def download_certificate_public_fr(request, pk):
                 if not test_user:
                     return JsonResponse({'success': False, 'error': 'Utilisateur de test non trouvé'}, status=404)
                 
-                attempt_obj = TestAttempt.objects.get(id=attempt_id, user=test_user, passed=True)
+                attempt_obj = TestAttempt.objects.get(id=attempt_id, user=test_user, passed=True, etat='test_final')
                 
                 # Vérifier que completed_at existe
                 if not attempt_obj.completed_at:

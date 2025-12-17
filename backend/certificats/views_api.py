@@ -41,9 +41,10 @@ class CertificateViewSet(viewsets.ReadOnlyModelViewSet):
         return CertificateListSerializer
     
     def get_queryset(self):
-        """Retourner les certificats de l'utilisateur actuel"""
+        """Retourner les certificats de l'utilisateur actuel (uniquement pour les tests finaux)"""
         return Certificate.objects.filter(
-            test_attempt__user=self.request.user
+            test_attempt__user=self.request.user,
+            test_attempt__etat='test_final'
         ).order_by('-issued_date')
     
     @action(detail=True, methods=['get'])
@@ -84,7 +85,10 @@ class CertificateViewSet(viewsets.ReadOnlyModelViewSet):
                 'error': 'Veuillez fournir un nom ou un CIN'
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        queryset = Certificate.objects.all()
+        # Filtrer uniquement les certificats liés à des tests finaux
+        queryset = Certificate.objects.filter(
+            test_attempt__etat='test_final'
+        )
         
         if user_cin:
             queryset = queryset.filter(user_cin=user_cin)
@@ -133,6 +137,13 @@ class CertificateViewSet(viewsets.ReadOnlyModelViewSet):
                 return Response({
                     'success': False,
                     'error': 'Le test n\'a pas été réussi'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Vérifier que c'est un test final (les tests initiaux ne génèrent pas de certificats)
+            if attempt.etat != 'test_final':
+                return Response({
+                    'success': False,
+                    'error': 'Les certificats sont uniquement générés pour les tests finaux'
                 }, status=status.HTTP_400_BAD_REQUEST)
             
             # Vérifier si un certificat existe déjà

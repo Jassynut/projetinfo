@@ -100,7 +100,7 @@ def manager_generate_test_qr(request, test_id):
 
             # Construire l'URL du frontend pour le QR code
             # Utiliser l'IP locale depuis les settings ou l'environnement
-            frontend_url = os.getenv('FRONTEND_URL', 'http://10.24.159.19:3000')
+            frontend_url = os.getenv('FRONTEND_URL', 'http://10.24.159.13:3000')
             
             # Données à encoder dans le QR
             qr_payload = {
