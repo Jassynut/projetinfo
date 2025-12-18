@@ -6,6 +6,7 @@ urlpatterns = [
     # Users HSE - Endpoints simples
     # Note: users/search/ est maintenant dans urls_api.py pour éviter les conflits avec le router DRF
     path('users/create/', views.create_hse_user, name='create_hse_user'),
+    path('users/<int:user_id>/update/', views.update_hse_user, name='update_hse_user'),
     path('users/export-excel/', views.export_hse_users_excel, name='export_hse_users_excel'),
     path('users/<int:user_id>/presence/', views.update_user_presence, name='update_presence'),
     path('users/<int:user_id>/sensibilise/', views.update_user_sensibilise, name='update_sensibilise'),

@@ -474,7 +474,34 @@ export default function Database() {
   };
 
   const handleDeleteUsers = async (userIds = null) => {
-    const usersToDelete = userIds || selectedUsers;
+    // S'assurer que usersToDelete est toujours un tableau d'IDs numériques
+    let usersToDelete = [];
+    if (userIds) {
+      // Si userIds est fourni, s'assurer que c'est un tableau
+      const idsArray = Array.isArray(userIds) ? userIds : [userIds];
+      // Extraire les IDs si ce sont des objets
+      usersToDelete = idsArray.map(id => {
+        // Si c'est un objet, extraire l'ID
+        if (typeof id === 'object' && id !== null) {
+          return id.id || id.userId || id;
+        }
+        // Sinon, retourner l'ID directement
+        return id;
+      }).filter(id => id != null); // Filtrer les valeurs null/undefined
+    } else {
+      // Sinon, utiliser selectedUsers (qui devrait déjà être un tableau)
+      const idsArray = Array.isArray(selectedUsers) ? selectedUsers : [];
+      // Extraire les IDs si ce sont des objets
+      usersToDelete = idsArray.map(id => {
+        // Si c'est un objet, extraire l'ID
+        if (typeof id === 'object' && id !== null) {
+          return id.id || id.userId || id;
+        }
+        // Sinon, retourner l'ID directement
+        return id;
+      }).filter(id => id != null); // Filtrer les valeurs null/undefined
+    }
+    
     if (usersToDelete.length === 0) {
       alert('Veuillez sélectionner au moins un utilisateur à supprimer.');
       return;
@@ -486,10 +513,12 @@ export default function Database() {
 
     setLoading(true);
     try {
-      // Supprimer chaque utilisateur
-      const deletePromises = usersToDelete.map(userId =>
-        axios.delete(`${API_BASE}/api/hse/users/${userId}/delete/`)
-      );
+      // Supprimer chaque utilisateur (s'assurer que userId est un nombre ou une string)
+      const deletePromises = usersToDelete.map(userId => {
+        // Convertir en string si nécessaire
+        const id = String(userId);
+        return axios.delete(`${API_BASE}/api/hse/users/${id}/delete/`);
+      });
 
       const results = await Promise.allSettled(deletePromises);
       const successful = results.filter(r => r.status === 'fulfilled' && r.value.data?.success).length;
@@ -906,6 +935,18 @@ export default function Database() {
                           {user.sensibilise_avec_succes ? 'OUI' : 'NON'}
                         </span>
                       </td>
+                      <td className="p-3 border text-center">
+                        <button
+                          onClick={() => {
+                            setEditingUser(user);
+                            setShowEditModal(true);
+                          }}
+                          className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
+                          title="Modifier"
+                        >
+                          ✏️
+                        </button>
+                      </td>
                     </tr>
                   );
                 })
@@ -983,32 +1024,19 @@ export default function Database() {
                       </td>
                       <td className="p-3 border text-center">
                         {userId ? (
-                          <div className="flex gap-2 justify-center">
-                            <button
-                              onClick={() => {
-                                const userToEdit = users.find(u => u.id === userId) || userFromList;
-                                if (userToEdit) {
-                                  setEditingUser(userToEdit);
-                                  setShowEditModal(true);
-                                }
-                              }}
-                              className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
-                              title="Modifier"
-                            >
-                              ✏️
-                            </button>
-                            <button
-                              onClick={() => {
-                                if (window.confirm(`Êtes-vous sûr de vouloir supprimer ${getValue('nom')} ${getValue('prénom') || getValue('prenom')} (${cin}) ?`)) {
-                                  handleDeleteUsers([userId]);
-                                }
-                              }}
-                              className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 text-sm"
-                              title="Supprimer"
-                            >
-                              🗑️
-                            </button>
-                          </div>
+                          <button
+                            onClick={() => {
+                              const userToEdit = users.find(u => u.id === userId) || userFromList;
+                              if (userToEdit) {
+                                setEditingUser(userToEdit);
+                                setShowEditModal(true);
+                              }
+                            }}
+                            className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
+                            title="Modifier"
+                          >
+                            ✏️
+                          </button>
                         ) : (
                           <span className="text-gray-400 text-sm">-</span>
                         )}
@@ -1064,29 +1092,16 @@ export default function Database() {
                         </span>
                       </td>
                       <td className="p-3 border text-center">
-                        <div className="flex gap-2 justify-center">
-                          <button
-                            onClick={() => {
-                              setEditingUser(user);
-                              setShowEditModal(true);
-                            }}
-                            className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
-                            title="Modifier"
-                          >
-                            ✏️
-                          </button>
-                          <button
-                            onClick={() => {
-                              if (window.confirm(`Êtes-vous sûr de vouloir supprimer ${user.nom} ${user.prénom || user.prenom} (${user.cin}) ?`)) {
-                                handleDeleteUsers([user.id]);
-                              }
-                            }}
-                            className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 text-sm"
-                            title="Supprimer"
-                          >
-                            🗑️
-                          </button>
-                        </div>
+                        <button
+                          onClick={() => {
+                            setEditingUser(user);
+                            setShowEditModal(true);
+                          }}
+                          className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
+                          title="Modifier"
+                        >
+                          ✏️
+                        </button>
                       </td>
                     </tr>
                   );

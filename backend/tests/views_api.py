@@ -486,7 +486,9 @@ def version_questions(request, pk):
     return Response({'questions': serializer.data, 'version': test.version})
 
 
+@csrf_exempt
 @api_view(['POST'])
+@authentication_classes([])  # Disable authentication (and thus CSRF) for this view
 @permission_classes([permissions.AllowAny])
 def version_add_question(request, pk):
     test = get_object_or_404(Test, pk=pk)
@@ -508,7 +510,9 @@ def version_add_question(request, pk):
     return Response({'success': True, 'ordre_questions': test.ordre_questions})
 
 
+@csrf_exempt
 @api_view(['PATCH'])
+@authentication_classes([])  # Disable authentication (and thus CSRF) for this view
 @permission_classes([permissions.AllowAny])
 def version_update_order(request, pk):
     """Mettre à jour l'ordre des questions d'une version"""

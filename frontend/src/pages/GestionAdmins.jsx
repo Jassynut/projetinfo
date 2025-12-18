@@ -32,11 +32,21 @@ export default function GestionAdmins() {
         },
       });
       
+      // Gérer différents formats de réponse
+      console.log("[GESTION_ADMINS] Réponse reçue:", res.data);
+      
       if (res.data && Array.isArray(res.data)) {
+        console.log("[GESTION_ADMINS] Format: Array direct, nombre:", res.data.length);
         setManagers(res.data);
       } else if (res.data?.results) {
+        console.log("[GESTION_ADMINS] Format: DRF paginated, nombre:", res.data.results.length);
         setManagers(res.data.results);
+      } else if (res.data?.managers && Array.isArray(res.data.managers)) {
+        // Format de réponse de list_hse_managers
+        console.log("[GESTION_ADMINS] Format: list_hse_managers, nombre:", res.data.managers.length);
+        setManagers(res.data.managers);
       } else {
+        console.warn("[GESTION_ADMINS] Format inconnu ou vide:", res.data);
         setManagers([]);
       }
     } catch (err) {

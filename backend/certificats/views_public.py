@@ -64,23 +64,38 @@ def search_certificate_public_fr(request):
         # Générer les certificats à la volée (sans les sauvegarder)
         data = []
         
-        # Certificats basés sur les tests réussis uniquement
+        # Certificats basés sur les tests réussis
         try:
             # Chercher les tentatives de test réussies pour cet utilisateur
             from authentication.models import TestUser
             test_user = TestUser.objects.filter(cin__iexact=hse_user.cin).first()
             if test_user:
-                # Ne chercher que les tentatives de test final réussies
+                # Chercher TOUTES les tentatives de test final réussies de TOUS les jours
+                # Pas de limite de date, récupérer tous les tests attempts réussis
+                # Utiliser select_related pour charger le test en une seule requête
+                # IMPORTANT: Générer un certificat pour CHAQUE test attempt réussi, même s'ils sont le même jour
                 passed_attempts = TestAttempt.objects.filter(
                     user=test_user,
                     passed=True,
                     status='passed',
                     etat='test_final'
-                ).order_by('-completed_at')[:5]
+                ).exclude(completed_at__isnull=True).select_related('test').order_by('-completed_at')
                 
+                # Générer un certificat pour chaque test attempt réussi (un par jour/session)
                 for attempt in passed_attempts:
                     # Vérifier que completed_at existe
                     if not attempt.completed_at:
+                        continue
+                    
+                    # Vérifier que le test existe et a une version valide
+                    if not hasattr(attempt, 'test') or not attempt.test:
+                        logger.warning(f"TestAttempt {attempt.id} n'a pas de test associé, ignoré")
+                        continue
+                    
+                    # Vérifier que la version du test est valide (>= 1)
+                    test_version = attempt.test.version if hasattr(attempt.test, 'version') else None
+                    if not test_version or test_version < 1:
+                        logger.warning(f"TestAttempt {attempt.id} a une version invalide ({test_version}), ignoré")
                         continue
                     
                     cert_number = f"HSE-{attempt.completed_at.strftime('%Y%m%d')}-{attempt.id}"
@@ -104,11 +119,15 @@ def search_certificate_public_fr(request):
                     # Calculer le score réel sur 21 (nombre de bonnes réponses)
                     score_sur_21 = attempt.mandatory_correct + attempt.optional_correct
                     
+                    # Générer un certificat distinct pour chaque test attempt réussi
+                    # Chaque attempt a un ID unique, donc même s'ils sont le même jour, ils génèrent des certificats distincts
+                    logger.info(f"Génération certificat pour attempt {attempt.id} - Date: {attempt.completed_at.date()} - Version: {test_version}")
+                    
                     data.append({
                         'id': f"cert::{hse_user.cin}::test::{attempt.id}",
                         'user_full_name': hse_user.get_full_name(),
                         'user_cin': hse_user.cin,
-                        'test_version': attempt.test.version,
+                        'test_version': test_version,
                         'score': int(attempt.overall_score_percentage),
                         'date_test': attempt.completed_at.isoformat(),
                         'score_sur_21': score_sur_21,
@@ -120,6 +139,27 @@ def search_certificate_public_fr(request):
                     })
         except Exception as e:
             logger.warning(f"Erreur lors de la récupération des tentatives de test: {str(e)}")
+        
+        # Si l'utilisateur est sensibilisé mais n'a pas de test attempts, générer un certificat de sensibilisation
+        if len(data) == 0 and hse_user.sensibilise_avec_succes:
+            logger.info(f"Génération d'un certificat de sensibilisation pour {user_cin} (pas de test attempts)")
+            cert_number = f"HSE-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
+            expiry = (datetime.now() + timedelta(days=365)).date()
+            
+            data.append({
+                'id': f"cert::{hse_user.cin}::sensibilisation",
+                'user_full_name': hse_user.get_full_name(),
+                'user_cin': hse_user.cin,
+                'test_version': 0,
+                'score': 100,
+                'date_test': datetime.now().isoformat(),
+                'score_sur_21': 0,
+                'time_taken_minutes': 0,
+                'certificate_number': cert_number,
+                'issued_date': datetime.now().isoformat(),
+                'expiry_date': expiry.isoformat(),
+                'attempt_id': None,
+            })
         
         logger.info(f"Retour de {len(data)} certificats générés à la volée")
         return JsonResponse({

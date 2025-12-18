@@ -158,13 +158,23 @@ export default function ConsultationCertificats() {
                         <div className="flex items-center gap-3 mb-2">
                           <div className="w-3 h-3 bg-green-500 rounded-full"></div>
                           <p className="font-semibold text-green-800">
-                            Test HSE - Version {cert.test_version}
+                            {cert.test_version === 0 || cert.test_version === null 
+                              ? 'Certificat de Sensibilisation HSE'
+                              : `Test HSE - Version ${cert.test_version}`}
                           </p>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm text-gray-600">
                           <p>Date: {new Date(cert.date_test).toLocaleDateString('fr-FR')}</p>
-                          <p>Score: {cert.score_sur_21}/21 ({Math.round(cert.score)}%)</p>
-                          <p>Durée: {cert.time_taken_minutes > 0 ? `${cert.time_taken_minutes} min` : 'N/A'}</p>
+                          {cert.test_version === 0 || cert.test_version === null ? (
+                            <p>Statut: Sensibilisé avec succès</p>
+                          ) : (
+                            <p>Score: {cert.score_sur_21 || 0}/21 ({cert.score_sur_21 > 0 ? Math.round((cert.score_sur_21 / 21) * 100) : 0}%)</p>
+                          )}
+                          {cert.test_version === 0 || cert.test_version === null ? (
+                            <p></p>
+                          ) : (
+                            <p>Durée: {cert.time_taken_minutes > 0 ? `${cert.time_taken_minutes} min` : 'N/A'}</p>
+                          )}
                         </div>
                       </div>
                       <button

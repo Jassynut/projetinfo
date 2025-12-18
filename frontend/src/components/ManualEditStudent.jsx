@@ -61,9 +61,9 @@ export default function ManualEditStudent({ user, onSuccess, onClose }) {
         return;
       }
 
-      // Utiliser l'endpoint de mise à jour (PUT ou PATCH)
+      // Utiliser l'endpoint de mise à jour dédié (même principe que create)
       const response = await axios.put(
-        `${API_BASE}/api/hse/users/${user.id}/`,
+        `${API_BASE}/api/hse/users/${user.id}/update/`,
         {
           cin: formData.cin.toUpperCase(),
           nom: formData.nom,

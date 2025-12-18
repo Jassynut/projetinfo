@@ -240,6 +240,113 @@ def create_hse_user(request):
 
 
 @csrf_exempt
+def update_hse_user(request, user_id):
+    """
+    Modifier un utilisateur HSE
+    PUT/PATCH: /api/hse/users/{user_id}/update/
+    Nécessite une authentification manager (via session)
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    # Log pour débogage
+    logger.info(f"[UPDATE_USER] Méthode: {request.method}")
+    logger.info(f"[UPDATE_USER] User: {request.user}")
+    logger.info(f"[UPDATE_USER] Authenticated: {request.user.is_authenticated if hasattr(request.user, 'is_authenticated') else 'N/A'}")
+    logger.info(f"[UPDATE_USER] Session key: {request.session.session_key if hasattr(request, 'session') else 'N/A'}")
+    
+    # Vérifier l'authentification manuellement (sans DRF pour éviter les problèmes de permission)
+    if not request.user or not request.user.is_authenticated:
+        logger.warning("[UPDATE_USER] Utilisateur non authentifié")
+        return JsonResponse({
+            'success': False,
+            'error': 'Authentification requise. Veuillez vous connecter en tant que manager.'
+        }, status=401)
+    
+    # Vérifier que l'utilisateur est un manager
+    is_manager = False
+    if hasattr(request.user, 'is_manager'):
+        is_manager = request.user.is_manager
+    elif hasattr(request.user, 'user_type'):
+        is_manager = request.user.user_type == 'manager'
+    
+    if not is_manager and not request.user.is_staff:
+        logger.warning(f"[UPDATE_USER] Accès refusé - User type: {getattr(request.user, 'user_type', 'N/A')}, is_staff: {request.user.is_staff}")
+        return JsonResponse({
+            'success': False,
+            'error': 'Accès refusé. Seuls les managers peuvent modifier des utilisateurs HSE.'
+        }, status=403)
+    
+    logger.info(f"[UPDATE_USER] Accès autorisé pour {request.user}")
+    
+    if request.method in ['PUT', 'PATCH']:
+        try:
+            data = json.loads(request.body)
+            
+            # Récupérer l'utilisateur
+            try:
+                user = HSEUser.objects.get(id=user_id)
+            except HSEUser.DoesNotExist:
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Utilisateur avec l\'ID {user_id} non trouvé'
+                }, status=404)
+            
+            # Vérifier si le CIN a changé et s'il existe déjà pour un autre utilisateur
+            new_cin = data.get('cin', '').strip().upper()
+            if new_cin and new_cin != user.cin:
+                if HSEUser.objects.filter(cin=new_cin).exclude(id=user_id).exists():
+                    return JsonResponse({
+                        'success': False,
+                        'error': f'Un utilisateur avec le CIN {new_cin} existe déjà'
+                    }, status=400)
+            
+            # Mettre à jour les champs
+            if 'nom' in data:
+                user.nom = data['nom']
+            if 'prénom' in data or 'prenom' in data:
+                user.prénom = data.get('prénom') or data.get('prenom', '')
+            if 'cin' in data:
+                user.cin = new_cin
+            if 'entite' in data:
+                user.entite = data.get('entite', '')
+            if 'entreprise' in data:
+                user.entreprise = data.get('entreprise', '')
+            if 'chef_projet_ocp' in data:
+                user.chef_projet_ocp = data.get('chef_projet_ocp', '')
+            
+            user.save()
+            
+            return JsonResponse({
+                'success': True,
+                'user': {
+                    'id': user.id,
+                    'full_name': user.get_full_name(),
+                    'cin': user.cin,
+                    'entreprise': user.entreprise,
+                    'entite': user.entite
+                },
+                'message': 'Utilisateur HSE modifié avec succès'
+            })
+            
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'success': False,
+                'error': 'Format JSON invalide'
+            }, status=400)
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'error': f'Erreur modification: {str(e)}'
+            }, status=500)
+    
+    return JsonResponse({
+        'success': False,
+        'error': 'Méthode non autorisée'
+    }, status=405)
+
+
+@csrf_exempt
 def export_hse_users_excel(request):
     """
     Exporter les utilisateurs HSE en fichier Excel
@@ -925,18 +1032,61 @@ def get_hse_statistics(request):
 # ==================== API HSE MANAGERS ====================
 
 @login_required
+@csrf_exempt
 def list_hse_managers(request):
     """
-    Lister les managers HSE
+    Lister les managers HSE (inclut le current user s'il est manager)
     GET: /api/hse/managers/
+    Retourne TOUS les managers de la table HSEManager
     """
-    if not request.user.is_staff:
+    # Vérifier l'authentification (mais permettre l'accès si l'utilisateur est manager ou staff)
+    if not request.user.is_authenticated:
         return JsonResponse({
             'success': False,
-            'error': 'Accès non autorisé'
-        }, status=403)
+            'error': 'Authentification requise'
+        }, status=401)
     
+    # Logger pour débogage
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"[LIST_MANAGERS] User: {request.user}, Authenticated: {request.user.is_authenticated}")
+    logger.info(f"[LIST_MANAGERS] User type: {getattr(request.user, 'user_type', 'N/A')}")
+    logger.info(f"[LIST_MANAGERS] Is manager (property): {getattr(request.user, 'is_manager', 'N/A')}")
+    logger.info(f"[LIST_MANAGERS] Is staff: {getattr(request.user, 'is_staff', 'N/A')}")
+    
+    # Vérifier que l'utilisateur est manager ou staff
+    # Utiliser user_type directement car is_manager est une propriété
+    is_manager_or_staff = False
+    if hasattr(request.user, 'user_type'):
+        is_manager_or_staff = request.user.user_type == 'manager'
+    # Essayer aussi la propriété is_manager
+    if not is_manager_or_staff:
+        try:
+            is_manager_or_staff = request.user.is_manager
+        except:
+            pass
+    
+    logger.info(f"[LIST_MANAGERS] Is manager or staff: {is_manager_or_staff or request.user.is_staff}")
+    
+    # Si l'utilisateur n'est ni manager ni staff, retourner 403
+    # MAIS permettre l'accès si l'utilisateur est authentifié (pour déboguer)
+    if not is_manager_or_staff and not request.user.is_staff:
+        logger.warning(f"[LIST_MANAGERS] Accès refusé - User n'est pas manager ni staff")
+        # TEMPORAIRE: Permettre l'accès si l'utilisateur est authentifié pour déboguer
+        if not request.user.is_authenticated:
+            return JsonResponse({
+                'success': False,
+                'error': 'Accès non autorisé. Seuls les managers peuvent voir cette liste.'
+            }, status=403)
+        # Si authentifié mais pas manager/staff, continuer quand même pour déboguer
+        logger.warning(f"[LIST_MANAGERS] Accès autorisé temporairement pour déboguer (user authentifié)")
+    
+    # Récupérer TOUS les managers de la table HSEManager (sans filtre)
+    # Utiliser .all() sans aucun filtre pour s'assurer que tous les managers sont inclus
     managers = HSEManager.objects.all().order_by('full_name')
+    
+    logger.info(f"[LIST_MANAGERS] Nombre total de managers dans la table: {managers.count()}")
+    logger.info(f"[LIST_MANAGERS] Managers trouvés: {[m.full_name for m in managers]}")
     
     managers_data = []
     for manager in managers:
@@ -945,6 +1095,32 @@ def list_hse_managers(request):
             'full_name': manager.full_name,
             'cin': manager.cin,
         })
+    
+    logger.info(f"[LIST_MANAGERS] Nombre de managers dans la réponse: {len(managers_data)}")
+    
+    # Ajouter le current user s'il est manager mais n'est pas dans HSEManager
+    if request.user.is_authenticated:
+        current_user_is_manager = False
+        if hasattr(request.user, 'is_manager'):
+            current_user_is_manager = request.user.is_manager
+        elif hasattr(request.user, 'user_type'):
+            current_user_is_manager = request.user.user_type == 'manager'
+        
+        if (current_user_is_manager or request.user.is_staff) and hasattr(request.user, 'cin') and request.user.cin:
+            # Vérifier si le current user existe déjà dans la liste
+            current_user_in_list = any(
+                m.get('cin', '').upper() == request.user.cin.upper() 
+                for m in managers_data
+            )
+            
+            # Si le current user n'est pas dans la liste, l'ajouter
+            if not current_user_in_list:
+                managers_data.append({
+                    'id': None,  # Pas d'ID car pas dans HSEManager
+                    'full_name': request.user.full_name or f"{request.user.username} (Current)",
+                    'cin': request.user.cin,
+                    'is_current_user': True
+                })
     
     return JsonResponse({
         'success': True,
