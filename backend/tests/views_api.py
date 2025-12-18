@@ -269,7 +269,9 @@ def user_test_attempts(request):
 # ALIAS / ENDPOINTS FRONTEND COMPAT (versions/questions publics)
 # =============================================================================
 
+@csrf_exempt
 @api_view(['GET', 'POST'])
+@authentication_classes([])  # Disable authentication (and thus CSRF) for this view
 @permission_classes([permissions.AllowAny])
 def list_versions(request):
     if request.method == 'POST':
@@ -401,7 +403,9 @@ def list_active_versions(request):
     return Response({'versions': data})
 
 
+@csrf_exempt
 @api_view(['GET', 'PUT', 'DELETE'])
+@authentication_classes([])  # Disable authentication (and thus CSRF) for this view
 @permission_classes([permissions.AllowAny])
 def version_detail(request, pk):
     test = get_object_or_404(Test, pk=pk)

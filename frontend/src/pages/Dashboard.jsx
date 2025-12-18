@@ -16,8 +16,8 @@ export default function Dashboard() {
       {/* Intro text */}
       <p className="text-center text-gray-700 text-xl font-medium max-w-4xl mx-auto mb-16 leading-relaxed">
         Ce portail vous permet de gérer les <span className="font-bold">formations HSE</span>, 
-        les <span className="font-bold">tests</span>, et les 
-        <span className="font-bold">certificats</span> de vos collaborateurs
+        les <span className="font-bold">tests</span>, et les  
+        <span className="font-bold"> certificats</span> de vos collaborateurs
         en toute simplicité.
       </p>
 

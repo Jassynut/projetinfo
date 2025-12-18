@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import TopNav from "../components/TopNav";
+import ManualAddStudent from "../components/ManualAddStudent";
 
 import { API_BASE } from "../config";
 
@@ -15,6 +16,8 @@ export default function Database() {
   const [selectedUsers, setSelectedUsers] = useState([]); // IDs des utilisateurs sélectionnés pour suppression
   const [searchQuery, setSearchQuery] = useState(''); // Recherche par CIN, Nom ou Prénom
   const searchTimeoutRef = useRef(null); // Référence pour le timeout de recherche
+  const [showAddModal, setShowAddModal] = useState(false); // Modal pour ajouter un apprenant
+  const [newUser, setNewUser] = useState({ cin: '', nom: '', prenom: '', entite: '', entreprise: '', chef_projet_ocp: '' });
 
   useEffect(() => {
     fetchUsers(null, '');
@@ -150,6 +153,67 @@ export default function Database() {
         // Si l'endpoint n'existe pas, on continue sans prévisualisation
         console.log("Prévisualisation non disponible, importez pour voir les données");
       }
+  };
+
+  const handleAddUser = async () => {
+    if (!newUser.cin || !newUser.nom || !newUser.prenom) {
+      alert("Veuillez remplir au moins le CIN, le nom et le prénom.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await axios.post(
+        `${API_BASE}/api/hse/users/create/`,
+        {
+          cin: newUser.cin.toUpperCase(),
+          nom: newUser.nom,
+          prénom: newUser.prenom,
+          entite: newUser.entite || '',
+          entreprise: newUser.entreprise || '',
+          chef_projet_ocp: newUser.chef_projet_ocp || ''
+        }
+      );
+
+      if (res.data.success) {
+        alert("Apprenant ajouté avec succès !");
+        setShowAddModal(false);
+        setNewUser({ cin: '', nom: '', prenom: '', entite: '', entreprise: '', chef_projet_ocp: '' });
+        fetchUsers(filterDate || null, searchQuery);
+      } else {
+        alert(`Erreur: ${res.data.error || 'Erreur lors de l\'ajout'}`);
+      }
+    } catch (err) {
+      console.error("Erreur ajout apprenant:", err);
+      alert(`Erreur: ${err.response?.data?.error || err.message || 'Erreur lors de l\'ajout'}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleExportExcel = async () => {
+    setLoading(true);
+    try {
+      const res = await axios.get(
+        `${API_BASE}/api/hse/users/export-excel/`,
+        { responseType: 'blob' }
+      );
+
+      // Créer un lien de téléchargement
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `apprenants_${new Date().toISOString().split('T')[0]}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Erreur export Excel:", err);
+      alert(`Erreur lors de l'export: ${err.response?.data?.error || err.message || 'Erreur inconnue'}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleUpload = async () => {
@@ -636,12 +700,29 @@ export default function Database() {
               </button>
             )}
 
+            {/* BOUTON AJOUTER MANUELLEMENT */}
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
+            >
+              + Ajouter apprenant
+            </button>
+
             {/* BOUTON IMPORT */}
             <button
               onClick={triggerFileDialog}
               className="bg-green-700 text-white px-4 py-2 rounded-lg hover:bg-green-800 transition"
             >
               + Importer fichier Excel
+            </button>
+
+            {/* BOUTON EXPORTER */}
+            <button
+              onClick={handleExportExcel}
+              disabled={loading || (users.length === 0 && tableData.length === 0)}
+              className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              📥 Exporter en Excel
             </button>
           </div>
 
@@ -956,6 +1037,23 @@ export default function Database() {
       <footer className="text-center mt-20 text-gray-600 text-sm">
         © 2025 OCP – Portail Interne HSE. Tous droits réservés.
       </footer>
+
+      {/* MODAL AJOUTER APPRENANT */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="max-w-md w-full mx-4">
+            <ManualAddStudent
+              onSuccess={() => {
+                fetchUsers(filterDate || null, searchQuery);
+              }}
+              onClose={() => {
+                setShowAddModal(false);
+                setNewUser({ cin: '', nom: '', prenom: '', entite: '', entreprise: '', chef_projet_ocp: '' });
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

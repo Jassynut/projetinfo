@@ -29,10 +29,15 @@ export default function PasserTest() {
   // Log pour déboguer
   useEffect(() => {
     console.log("PasserTest - ID récupéré depuis les paramètres:", id);
+    console.log("PasserTest - URL complète:", window.location.href);
+    console.log("PasserTest - Search params:", searchParams.toString());
     if (!id) {
       console.error("PasserTest - ERREUR: ID manquant dans les paramètres de route");
+      setError("ID du test manquant dans l'URL. Veuillez scanner le QR code à nouveau ou contacter l'administrateur.");
+    } else {
+      console.log("PasserTest - Page chargée avec succès, ID:", id);
     }
-  }, [id]);
+  }, [id, searchParams]);
 
   const total = questions.length;
   const currentQuestion = questions[current];

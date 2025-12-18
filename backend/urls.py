@@ -24,14 +24,15 @@ urlpatterns = [
 
     # MODULE STATS (EXCEL, HSE)
     path('stats/', include('stats.urls')),
+    path('api/stats/', include('stats.urls')),  # Alias pour accès via /api/stats/
 
     # AUTHENTIFICATION API
     path('api/auth/', include('authentication.urls')),
 
-    # HSE API (router DRF + endpoints simples)
-    path('api/hse/', include('hse_app.urls_api')),
-    # HSE API (autres endpoints dans views.py)
+    # HSE API (endpoints simples dans views.py - PRIORITAIRE pour éviter les conflits avec le router)
     path('api/hse/', include('hse_app.urls')),
+    # HSE API (router DRF - après les routes explicites)
+    path('api/hse/', include('hse_app.urls_api')),
     # Import Excel utilisateurs HSE (alias direct)
     path('api/users/import/', hse_views.import_hse_users, name='import_hse_users'),
     path('api/users/import/preview/', hse_views.preview_hse_users_excel, name='preview_hse_users_excel'),

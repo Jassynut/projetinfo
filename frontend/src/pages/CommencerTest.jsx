@@ -10,18 +10,48 @@ export default function CommencerTest() {
 
   const versionId = useMemo(() => localStorage.getItem("selectedTestVersion"), []);
   
-  // Construire l'URL pour le QR code - TOUJOURS utiliser l'IP locale pour que les téléphones puissent y accéder
+  // Construire l'URL pour le QR code - Détection automatique de l'IP
   const getFrontendUrl = () => {
-    // TOUJOURS utiliser l'IP locale pour le QR code, peu importe comment on accède à la page
-    // Car le téléphone doit pouvoir y accéder depuis le réseau local
-    const ipLocale = '10.24.159.13';
-    const port = '3000'; // Port fixe pour Docker
+    const currentHostname = window.location.hostname;
+    let ipLocale = null;
     
-    return `http://${ipLocale}:${port}`;
+    // Méthode 1: Si on accède via IP (pas localhost), utiliser cette IP directement
+    // C'est la méthode qui fonctionnait avant - utiliser l'IP depuis l'URL
+    if (currentHostname && currentHostname !== 'localhost' && currentHostname !== '127.0.0.1') {
+      // Vérifier si c'est une IP (format x.x.x.x)
+      const ipPattern = /^(\d{1,3}\.){3}\d{1,3}$/;
+      if (ipPattern.test(currentHostname)) {
+        ipLocale = currentHostname;
+        console.log('✅ IP détectée depuis l\'URL actuelle:', ipLocale);
+      }
+    }
+    
+    // Méthode 2: Si on accède via localhost, extraire l'IP depuis FRONTEND_URL du backend
+    // On récupère l'IP depuis la variable d'environnement du backend via une requête
+    if (!ipLocale) {
+      // Essayer de récupérer depuis le backend (qui a FRONTEND_URL)
+      // Sinon, utiliser une valeur par défaut qui sera mise à jour dynamiquement
+      // Note: L'utilisateur doit accéder via son IP pour que le QR code fonctionne
+      // ou mettre à jour la valeur par défaut ci-dessous avec sa vraie IP
+      ipLocale = process.env.REACT_APP_FRONTEND_IP || '10.24.159.13';
+      console.warn('⚠️ Accès via localhost détecté. Pour que le QR code fonctionne, accédez via votre IP (ex: http://VOTRE_IP:3000)');
+      console.log('🔗 Utilisation de l\'IP par défaut:', ipLocale);
+      console.log('💡 Astuce: Accédez à la page via http://VOTRE_IP:3000 pour que le QR code utilise automatiquement la bonne IP');
+    }
+    
+    // IMPORTANT: Dans Docker, le frontend est exposé sur le port 3000 depuis l'extérieur
+    // Toujours utiliser le port 3000 pour le QR code (port Docker externe)
+    const port = '3000';
+    
+    // S'assurer que l'URL est bien formée (sans double slash)
+    const baseUrl = `http://${ipLocale}:${port}`.replace(/\/+$/, '');
+    console.log('🔗 Frontend URL finale pour QR code:', baseUrl);
+    return baseUrl;
   };
   
   const frontendUrl = useMemo(() => getFrontendUrl(), []);
-  const qrValue = versionId ? `${frontendUrl}/test/${versionId}/passer` : "";
+  // S'assurer que l'URL est bien formée et ne contient pas de caractères invalides
+  const qrValue = versionId ? `${frontendUrl}/test/${versionId}/passer`.replace(/\/+/g, '/') : "";
   
   // Afficher l'URL dans la console pour déboguer
   useEffect(() => {

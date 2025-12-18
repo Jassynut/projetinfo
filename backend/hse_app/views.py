@@ -9,6 +9,24 @@ from datetime import datetime, timedelta
 from tests.models import Test, Question, TestAttempt
 from hse_app.models import HSEManager, HSEUser
 from authentication.models import TestUser
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework import permissions
+from rest_framework.authentication import SessionAuthentication
+
+
+# Permission personnalisée pour les managers
+class IsManager(permissions.BasePermission):
+    """
+    Permission qui vérifie que l'utilisateur est un manager.
+    """
+    def has_permission(self, request, view):
+        # Vérifier que l'utilisateur est authentifié
+        if not request.user or not request.user.is_authenticated:
+            return False
+        
+        # Vérifier que l'utilisateur est un manager
+        # Soit via user_type == 'manager', soit via is_staff
+        return request.user.is_manager or request.user.is_staff
 
 
 # ==================== API HSE USERS (Participants) ====================
@@ -130,17 +148,44 @@ def search_hse_user_by_cin(request):
 
 
 @csrf_exempt
-@login_required
 def create_hse_user(request):
     """
     Créer un nouvel utilisateur HSE
     POST: /api/hse/users/create/
+    Nécessite une authentification manager (via session)
     """
-    if not request.user.is_staff:
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    # Log pour débogage
+    logger.info(f"[CREATE_USER] Méthode: {request.method}")
+    logger.info(f"[CREATE_USER] User: {request.user}")
+    logger.info(f"[CREATE_USER] Authenticated: {request.user.is_authenticated if hasattr(request.user, 'is_authenticated') else 'N/A'}")
+    logger.info(f"[CREATE_USER] Session key: {request.session.session_key if hasattr(request, 'session') else 'N/A'}")
+    
+    # Vérifier l'authentification manuellement (sans DRF pour éviter les problèmes de permission)
+    if not request.user or not request.user.is_authenticated:
+        logger.warning("[CREATE_USER] Utilisateur non authentifié")
         return JsonResponse({
             'success': False,
-            'error': 'Accès non autorisé'
+            'error': 'Authentification requise. Veuillez vous connecter en tant que manager.'
+        }, status=401)
+    
+    # Vérifier que l'utilisateur est un manager
+    is_manager = False
+    if hasattr(request.user, 'is_manager'):
+        is_manager = request.user.is_manager
+    elif hasattr(request.user, 'user_type'):
+        is_manager = request.user.user_type == 'manager'
+    
+    if not is_manager and not request.user.is_staff:
+        logger.warning(f"[CREATE_USER] Accès refusé - User type: {getattr(request.user, 'user_type', 'N/A')}, is_staff: {request.user.is_staff}")
+        return JsonResponse({
+            'success': False,
+            'error': 'Accès refusé. Seuls les managers peuvent créer des utilisateurs HSE.'
         }, status=403)
+    
+    logger.info(f"[CREATE_USER] Accès autorisé pour {request.user}")
     
     if request.method == 'POST':
         try:
@@ -192,6 +237,64 @@ def create_hse_user(request):
         'success': False,
         'error': 'Méthode non autorisée'
     }, status=405)
+
+
+@csrf_exempt
+def export_hse_users_excel(request):
+    """
+    Exporter les utilisateurs HSE en fichier Excel
+    GET: /api/hse/users/export-excel/
+    """
+    # Permettre l'accès sans authentification pour le développement
+    # En production, vous pouvez ajouter @login_required si nécessaire
+    try:
+        import pandas as pd
+        from django.http import HttpResponse
+        from io import BytesIO
+        
+        # Récupérer tous les utilisateurs
+        users = HSEUser.objects.all().order_by('date_ajout', 'nom', 'prénom')
+        
+        # Créer un DataFrame avec les mêmes colonnes que l'import
+        data = []
+        for user in users:
+            data.append({
+                'CIN': user.cin,
+                'Nom': user.nom or '',
+                'Prénom': user.prénom or '',
+                'Entité': user.entite or '',
+                'Entreprise': user.entreprise or '',
+                'Chef Projet OCP': user.chef_projet_ocp or '',
+                'Présence': 'Oui' if user.presence else 'Non',
+                'Date Ajout': user.date_ajout.strftime('%Y-%m-%d') if user.date_ajout else ''
+            })
+        
+        df = pd.DataFrame(data)
+        
+        # Créer le fichier Excel en mémoire
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='Apprenants')
+        
+        output.seek(0)
+        
+        # Créer la réponse HTTP
+        response = HttpResponse(
+            output.read(),
+            content_type='application/vnd.openpyxl.formats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = f'attachment; filename="apprenants_{datetime.now().strftime("%Y%m%d")}.xlsx"'
+        
+        return response
+        
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Erreur export Excel: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': f'Erreur export: {str(e)}'
+        }, status=500)
 
 
 @csrf_exempt

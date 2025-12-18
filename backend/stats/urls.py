@@ -7,6 +7,7 @@ urlpatterns = [
    
     path('upload_excel/', views.upload_excel, name='upload_excel'),
     path('hse/stats/', views.hse_stats, name='hse_stats'),  # ← AJOUT ICI
+    path('hse/stats/monthly/', views.hse_stats_monthly, name='hse_stats_monthly'),
     path('hse/questionnaires/', views.gestion_questionnaires, name='gestion_questionnaires'),
     path('hse/certificats/', views.generation_certificats, name='generation_certificats'),
 ]
