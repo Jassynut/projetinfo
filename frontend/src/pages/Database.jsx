@@ -473,50 +473,45 @@ export default function Database() {
     }
   };
 
-  const handleDeleteUsers = async (userIds = null) => {
-    // S'assurer que usersToDelete est toujours un tableau d'IDs numériques
-    let usersToDelete = [];
-    if (userIds) {
-      // Si userIds est fourni, s'assurer que c'est un tableau
-      const idsArray = Array.isArray(userIds) ? userIds : [userIds];
-      // Extraire les IDs si ce sont des objets
-      usersToDelete = idsArray.map(id => {
-        // Si c'est un objet, extraire l'ID
-        if (typeof id === 'object' && id !== null) {
-          return id.id || id.userId || id;
-        }
-        // Sinon, retourner l'ID directement
-        return id;
-      }).filter(id => id != null); // Filtrer les valeurs null/undefined
-    } else {
-      // Sinon, utiliser selectedUsers (qui devrait déjà être un tableau)
-      const idsArray = Array.isArray(selectedUsers) ? selectedUsers : [];
-      // Extraire les IDs si ce sont des objets
-      usersToDelete = idsArray.map(id => {
-        // Si c'est un objet, extraire l'ID
-        if (typeof id === 'object' && id !== null) {
-          return id.id || id.userId || id;
-        }
-        // Sinon, retourner l'ID directement
-        return id;
-      }).filter(id => id != null); // Filtrer les valeurs null/undefined
-    }
-    
-    if (usersToDelete.length === 0) {
+  const handleDeleteUsers = async () => {
+    // Vérifier que selectedUsers existe et contient des éléments
+    if (!selectedUsers || selectedUsers.length === 0) {
       alert('Veuillez sélectionner au moins un utilisateur à supprimer.');
       return;
     }
 
-    if (!confirm(`Êtes-vous sûr de vouloir supprimer ${usersToDelete.length} utilisateur(s) ? Cette action est irréversible.`)) {
+    // Convertir selectedUsers en tableau d'IDs valides (nombres ou strings)
+    const userIdsToDelete = [];
+    for (const item of selectedUsers) {
+      if (typeof item === 'number') {
+        userIdsToDelete.push(item);
+      } else if (typeof item === 'string' && item.trim() !== '') {
+        const num = parseInt(item.trim(), 10);
+        userIdsToDelete.push(isNaN(num) ? item.trim() : num);
+      } else if (typeof item === 'object' && item !== null) {
+        if (item.id != null) userIdsToDelete.push(item.id);
+        else if (item.userId != null) userIdsToDelete.push(item.userId);
+      }
+    }
+
+    console.log("[DELETE] selectedUsers:", selectedUsers);
+    console.log("[DELETE] userIdsToDelete:", userIdsToDelete);
+
+    if (userIdsToDelete.length === 0) {
+      alert('Aucun ID valide trouvé. Veuillez sélectionner des utilisateurs à supprimer.');
+      return;
+    }
+
+    if (!confirm(`Êtes-vous sûr de vouloir supprimer ${userIdsToDelete.length} utilisateur(s) ? Cette action est irréversible.`)) {
       return;
     }
 
     setLoading(true);
     try {
-      // Supprimer chaque utilisateur (s'assurer que userId est un nombre ou une string)
-      const deletePromises = usersToDelete.map(userId => {
-        // Convertir en string si nécessaire
+      // Supprimer chaque utilisateur avec son ID
+      const deletePromises = userIdsToDelete.map(userId => {
         const id = String(userId);
+        console.log("[DELETE] Suppression de l'utilisateur avec ID:", id);
         return axios.delete(`${API_BASE}/api/hse/users/${id}/delete/`);
       });
 
@@ -838,19 +833,19 @@ export default function Database() {
                     onChange={(e) => {
                       if (e.target.checked) {
                         // Sélectionner tous les utilisateurs visibles
-                        const visibleUserIds = filterDate && users.length > 0
-                          ? users.map(u => u.id)
-                          : tableData.length > 0
-                          ? tableData.filter(row => {
-                              const cin = (row.cin || row.CIN || row['n°_cin'] || '').toString().toUpperCase();
-                              const userId = row._id || (users.find(u => u.cin === cin)?.id);
-                              return userId;
-                            }).map(row => {
-                              const cin = (row.cin || row.CIN || row['n°_cin'] || '').toString().toUpperCase();
-                              return row._id || (users.find(u => u.cin === cin)?.id);
-                            })
-                          : users.map(u => u.id);
-                        setSelectedUsers(visibleUserIds.filter(id => id));
+                            const visibleUserIds = filterDate && users.length > 0
+                              ? users.map(u => u.id).filter(id => id != null)
+                              : tableData.length > 0
+                              ? tableData.filter(row => {
+                                  const cin = (row.cin || row.CIN || row['n°_cin'] || '').toString().toUpperCase();
+                                  const userId = row._id || (users.find(u => u.cin === cin)?.id);
+                                  return userId != null;
+                                }).map(row => {
+                                  const cin = (row.cin || row.CIN || row['n°_cin'] || '').toString().toUpperCase();
+                                  return row._id || (users.find(u => u.cin === cin)?.id);
+                                }).filter(id => id != null)
+                              : users.map(u => u.id).filter(id => id != null);
+                            setSelectedUsers(visibleUserIds);
                       } else {
                         setSelectedUsers([]);
                       }
@@ -899,9 +894,14 @@ export default function Database() {
                           checked={selectedUsers.includes(user.id)}
                           onChange={(e) => {
                             if (e.target.checked) {
-                              setSelectedUsers(prev => [...prev, user.id]);
+                              // S'assurer que user.id est un ID valide (pas un objet)
+                              const userId = typeof user.id === 'object' ? (user.id?.id || user.id) : user.id;
+                              if (userId != null) {
+                                setSelectedUsers(prev => [...prev, userId]);
+                              }
                             } else {
-                              setSelectedUsers(prev => prev.filter(id => id !== user.id));
+                              const userId = typeof user.id === 'object' ? (user.id?.id || user.id) : user.id;
+                              setSelectedUsers(prev => prev.filter(id => id !== userId));
                             }
                           }}
                           className="w-4 h-4 cursor-pointer"
@@ -984,9 +984,14 @@ export default function Database() {
                             checked={selectedUsers.includes(userId)}
                             onChange={(e) => {
                               if (e.target.checked) {
-                                setSelectedUsers(prev => [...prev, userId]);
+                                // S'assurer que userId est un ID valide (pas un objet)
+                                const cleanUserId = typeof userId === 'object' ? (userId?.id || userId) : userId;
+                                if (cleanUserId != null) {
+                                  setSelectedUsers(prev => [...prev, cleanUserId]);
+                                }
                               } else {
-                                setSelectedUsers(prev => prev.filter(id => id !== userId));
+                                const cleanUserId = typeof userId === 'object' ? (userId?.id || userId) : userId;
+                                setSelectedUsers(prev => prev.filter(id => id !== cleanUserId));
                               }
                             }}
                             className="w-4 h-4 cursor-pointer"
@@ -1058,9 +1063,14 @@ export default function Database() {
                           checked={selectedUsers.includes(user.id)}
                           onChange={(e) => {
                             if (e.target.checked) {
-                              setSelectedUsers(prev => [...prev, user.id]);
+                              // S'assurer que user.id est un ID valide (pas un objet)
+                              const userId = typeof user.id === 'object' ? (user.id?.id || user.id) : user.id;
+                              if (userId != null) {
+                                setSelectedUsers(prev => [...prev, userId]);
+                              }
                             } else {
-                              setSelectedUsers(prev => prev.filter(id => id !== user.id));
+                              const userId = typeof user.id === 'object' ? (user.id?.id || user.id) : user.id;
+                              setSelectedUsers(prev => prev.filter(id => id !== userId));
                             }
                           }}
                           className="w-4 h-4 cursor-pointer"
