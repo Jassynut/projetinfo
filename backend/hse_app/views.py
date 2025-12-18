@@ -251,46 +251,63 @@ def export_hse_users_excel(request):
         import pandas as pd
         from django.http import HttpResponse
         from io import BytesIO
+        import logging
+        logger = logging.getLogger(__name__)
         
-        # Récupérer tous les utilisateurs
+        logger.info("[EXPORT] Début de l'export Excel")
+        
+        # Récupérer tous les utilisateurs avec select_related pour optimiser
         users = HSEUser.objects.all().order_by('date_ajout', 'nom', 'prénom')
+        total_users = users.count()
+        logger.info(f"[EXPORT] Nombre d'utilisateurs à exporter: {total_users}")
         
         # Créer un DataFrame avec les mêmes colonnes que l'import
+        # Utiliser values() pour optimiser la requête
         data = []
-        for user in users:
+        for user in users.iterator(chunk_size=1000):  # Utiliser iterator pour les grandes listes
             data.append({
-                'CIN': user.cin,
+                'CIN': user.cin or '',
                 'Nom': user.nom or '',
                 'Prénom': user.prénom or '',
                 'Entité': user.entite or '',
                 'Entreprise': user.entreprise or '',
                 'Chef Projet OCP': user.chef_projet_ocp or '',
                 'Présence': 'Oui' if user.presence else 'Non',
+                'Sensibilisé avec succès': 'Oui' if user.sensibilise_avec_succes else 'Non',
                 'Date Ajout': user.date_ajout.strftime('%Y-%m-%d') if user.date_ajout else ''
             })
+        
+        logger.info(f"[EXPORT] DataFrame créé avec {len(data)} lignes")
         
         df = pd.DataFrame(data)
         
         # Créer le fichier Excel en mémoire
+        logger.info("[EXPORT] Création du fichier Excel...")
         output = BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             df.to_excel(writer, index=False, sheet_name='Apprenants')
         
         output.seek(0)
+        file_size = len(output.getvalue())
+        logger.info(f"[EXPORT] Fichier Excel créé, taille: {file_size} bytes")
         
         # Créer la réponse HTTP
         response = HttpResponse(
-            output.read(),
+            output.getvalue(),
             content_type='application/vnd.openpyxl.formats-officedocument.spreadsheetml.sheet'
         )
         response['Content-Disposition'] = f'attachment; filename="apprenants_{datetime.now().strftime("%Y%m%d")}.xlsx"'
+        response['Content-Length'] = str(file_size)
         
+        logger.info("[EXPORT] Export réussi")
         return response
         
     except Exception as e:
         import logging
+        import traceback
         logger = logging.getLogger(__name__)
         logger.error(f"Erreur export Excel: {str(e)}")
+        logger.error(traceback.format_exc())
         return JsonResponse({
             'success': False,
             'error': f'Erreur export: {str(e)}'

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import TopNav from "../components/TopNav";
 import ManualAddStudent from "../components/ManualAddStudent";
+import ManualEditStudent from "../components/ManualEditStudent";
 
 import { API_BASE } from "../config";
 
@@ -18,6 +19,8 @@ export default function Database() {
   const searchTimeoutRef = useRef(null); // Référence pour le timeout de recherche
   const [showAddModal, setShowAddModal] = useState(false); // Modal pour ajouter un apprenant
   const [newUser, setNewUser] = useState({ cin: '', nom: '', prenom: '', entite: '', entreprise: '', chef_projet_ocp: '' });
+  const [showEditModal, setShowEditModal] = useState(false); // Modal pour modifier un apprenant
+  const [editingUser, setEditingUser] = useState(null); // Utilisateur en cours de modification
 
   useEffect(() => {
     fetchUsers(null, '');
@@ -196,21 +199,34 @@ export default function Database() {
     try {
       const res = await axios.get(
         `${API_BASE}/api/hse/users/export-excel/`,
-        { responseType: 'blob' }
+        { 
+          responseType: 'blob',
+          timeout: 60000, // 60 secondes de timeout
+          withCredentials: true
+        }
       );
 
-      // Créer un lien de téléchargement
-      const url = window.URL.createObjectURL(new Blob([res.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `apprenants_${new Date().toISOString().split('T')[0]}.xlsx`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
+      // Vérifier que la réponse est bien un blob
+      if (res.data instanceof Blob) {
+        // Créer un lien de téléchargement
+        const url = window.URL.createObjectURL(res.data);
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `apprenants_${new Date().toISOString().split('T')[0]}.xlsx`);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(url);
+      } else {
+        throw new Error("Format de réponse invalide");
+      }
     } catch (err) {
       console.error("Erreur export Excel:", err);
-      alert(`Erreur lors de l'export: ${err.response?.data?.error || err.message || 'Erreur inconnue'}`);
+      if (err.code === 'ECONNABORTED' || err.message.includes('timeout')) {
+        alert("Erreur: Le téléchargement a pris trop de temps. Veuillez réessayer.");
+      } else {
+        alert(`Erreur lors de l'export: ${err.response?.data?.error || err.message || 'Erreur inconnue'}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -457,20 +473,21 @@ export default function Database() {
     }
   };
 
-  const handleDeleteUsers = async () => {
-    if (selectedUsers.length === 0) {
+  const handleDeleteUsers = async (userIds = null) => {
+    const usersToDelete = userIds || selectedUsers;
+    if (usersToDelete.length === 0) {
       alert('Veuillez sélectionner au moins un utilisateur à supprimer.');
       return;
     }
 
-    if (!confirm(`Êtes-vous sûr de vouloir supprimer ${selectedUsers.length} utilisateur(s) ? Cette action est irréversible.`)) {
+    if (!confirm(`Êtes-vous sûr de vouloir supprimer ${usersToDelete.length} utilisateur(s) ? Cette action est irréversible.`)) {
       return;
     }
 
     setLoading(true);
     try {
       // Supprimer chaque utilisateur
-      const deletePromises = selectedUsers.map(userId =>
+      const deletePromises = usersToDelete.map(userId =>
         axios.delete(`${API_BASE}/api/hse/users/${userId}/delete/`)
       );
 
@@ -831,6 +848,7 @@ export default function Database() {
                 <th className="p-3 border">N°_CIN</th>
                 <th className="p-3 border">Présence</th>
                 <th className="p-3 border">Sensibilisé avec succès</th>
+                <th className="p-3 border">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -963,6 +981,38 @@ export default function Database() {
                           {userFromList?.sensibilise_avec_succes ? 'OUI' : 'NON'}
                         </span>
                       </td>
+                      <td className="p-3 border text-center">
+                        {userId ? (
+                          <div className="flex gap-2 justify-center">
+                            <button
+                              onClick={() => {
+                                const userToEdit = users.find(u => u.id === userId) || userFromList;
+                                if (userToEdit) {
+                                  setEditingUser(userToEdit);
+                                  setShowEditModal(true);
+                                }
+                              }}
+                              className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
+                              title="Modifier"
+                            >
+                              ✏️
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (window.confirm(`Êtes-vous sûr de vouloir supprimer ${getValue('nom')} ${getValue('prénom') || getValue('prenom')} (${cin}) ?`)) {
+                                  handleDeleteUsers([userId]);
+                                }
+                              }}
+                              className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 text-sm"
+                              title="Supprimer"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-gray-400 text-sm">-</span>
+                        )}
+                      </td>
                     </tr>
                   );
                 })
@@ -1013,12 +1063,37 @@ export default function Database() {
                           {user.sensibilise_avec_succes ? 'OUI' : 'NON'}
                         </span>
                       </td>
+                      <td className="p-3 border text-center">
+                        <div className="flex gap-2 justify-center">
+                          <button
+                            onClick={() => {
+                              setEditingUser(user);
+                              setShowEditModal(true);
+                            }}
+                            className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
+                            title="Modifier"
+                          >
+                            ✏️
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (window.confirm(`Êtes-vous sûr de vouloir supprimer ${user.nom} ${user.prénom || user.prenom} (${user.cin}) ?`)) {
+                                handleDeleteUsers([user.id]);
+                              }
+                            }}
+                            className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 text-sm"
+                            title="Supprimer"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   );
                 })
               ) : (
                 <tr>
-                  <td colSpan="9" className="p-4 text-center text-gray-500">
+                  <td colSpan="10" className="p-4 text-center text-gray-500">
                     {filterDate 
                       ? `Aucun utilisateur ajouté le ${new Date(filterDate).toLocaleDateString('fr-FR')}.`
                       : "Aucune donnée disponible. Importez un fichier Excel pour commencer."}
@@ -1049,6 +1124,24 @@ export default function Database() {
               onClose={() => {
                 setShowAddModal(false);
                 setNewUser({ cin: '', nom: '', prenom: '', entite: '', entreprise: '', chef_projet_ocp: '' });
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* MODAL MODIFIER APPRENANT */}
+      {showEditModal && editingUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="max-w-md w-full mx-4">
+            <ManualEditStudent
+              user={editingUser}
+              onSuccess={() => {
+                fetchUsers(filterDate || null, searchQuery);
+              }}
+              onClose={() => {
+                setShowEditModal(false);
+                setEditingUser(null);
               }}
             />
           </div>
