@@ -25,7 +25,9 @@ urlpatterns = [
     path('statistics/', views.get_hse_statistics, name='hse_statistics'),
     
     # Managers
+    # Note: GET et POST pour list_hse_managers, DELETE est géré par une fonction dédiée
     path('managers/', views.list_hse_managers, name='list_managers'),
+    path('managers/<int:manager_id>/delete/', views.delete_hse_manager, name='delete_manager'),
     path('managers/create/', views.create_hse_manager, name='create_manager'),
     
     # Sync

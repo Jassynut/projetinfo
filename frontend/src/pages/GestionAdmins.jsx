@@ -155,18 +155,34 @@ export default function GestionAdmins() {
     setError("");
     setSuccess("");
     try {
-      await axios.delete(`${API_BASE}/api/hse/managers/${managerId}/`, {
-        withCredentials: true,
+      // Vérifier d'abord si l'utilisateur est authentifié (même principe que l'ajout d'apprenant)
+      const checkAuth = await axios.get(`${API_BASE}/api/auth/current-user/`, {
+        withCredentials: true
       });
-      setSuccess("Manager supprimé avec succès.");
-      fetchManagers();
+      
+      if (!checkAuth.data?.user || !checkAuth.data.user.is_manager) {
+        setError("❌ Vous devez être connecté en tant que manager pour supprimer un manager.");
+        setLoading(false);
+        return;
+      }
+
+      const response = await axios.delete(`${API_BASE}/api/hse/managers/${managerId}/delete/`, {
+        withCredentials: true,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (response.data.success) {
+        setSuccess("Manager supprimé avec succès.");
+        fetchManagers();
+      } else {
+        setError(response.data.error || "Échec de la suppression.");
+      }
     } catch (err) {
-      console.error(err);
-      setError(
-        err.response?.data?.error ||
-          err.response?.data?.detail ||
-          "Échec de la suppression."
-      );
+      console.error("Erreur suppression manager:", err);
+      const errorMsg = err.response?.data?.error || err.response?.data?.detail || err.message || "Échec de la suppression.";
+      setError(`❌ Erreur: ${errorMsg}`);
     } finally {
       setLoading(false);
     }

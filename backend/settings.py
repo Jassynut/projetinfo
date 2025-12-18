@@ -178,6 +178,7 @@ CSRF_TRUSTED_ORIGINS = [
     "http://127.0.0.1:8000",
     "http://backend:8000",
     "http://10.24.159.13:3000",
+    "http://10.24.159.24:3000",  # Nouvelle IP frontend
     "http://10.24.159.13:8000",
     frontend_origin,
 ]

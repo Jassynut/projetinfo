@@ -1039,6 +1039,58 @@ def list_hse_managers(request):
     GET: /api/hse/managers/
     Retourne TOUS les managers de la table HSEManager
     """
+    # Si c'est une requête POST, créer le manager directement ici
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            full_name = data.get('full_name', '').strip()
+            cin = data.get('cin', '').strip().upper()
+            
+            if not full_name:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Le nom complet est obligatoire'
+                }, status=400)
+            
+            if not cin:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Le CIN est obligatoire'
+                }, status=400)
+            
+            # Vérifier si le CIN existe déjà
+            if HSEManager.objects.filter(cin=cin).exists():
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Un manager avec le CIN {cin} existe déjà'
+                }, status=400)
+            
+            # Créer le manager
+            manager = HSEManager.objects.create(
+                full_name=full_name,
+                cin=cin
+            )
+            
+            return JsonResponse({
+                'id': manager.id,
+                'full_name': manager.full_name,
+                'cin': manager.cin
+            }, status=201)
+            
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'success': False,
+                'error': 'Format JSON invalide'
+            }, status=400)
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Erreur création manager: {str(e)}")
+            return JsonResponse({
+                'success': False,
+                'error': f'Erreur création: {str(e)}'
+            }, status=500)
+    
     # Vérifier l'authentification (mais permettre l'accès si l'utilisateur est manager ou staff)
     if not request.user.is_authenticated:
         return JsonResponse({
@@ -1146,16 +1198,17 @@ def create_hse_manager(request):
         try:
             data = json.loads(request.body)
             
+            # Le modèle utilise 'full_name', pas 'name'
             manager = HSEManager.objects.create(
-                name=data['name'],
-                cin=data.get('cin', '')
+                full_name=data.get('full_name', data.get('name', '')),
+                cin=data.get('cin', '').upper()
             )
             
             return JsonResponse({
                 'success': True,
                 'manager': {
                     'id': manager.id,
-                    'name': manager.name,
+                    'full_name': manager.full_name,
                     'cin': manager.cin
                 },
                 'message': 'Manager HSE créé avec succès'
@@ -1165,6 +1218,67 @@ def create_hse_manager(request):
             return JsonResponse({
                 'success': False,
                 'error': f'Erreur création: {str(e)}'
+            }, status=500)
+    
+    return JsonResponse({
+        'success': False,
+        'error': 'Méthode non autorisée'
+    }, status=405)
+
+
+@csrf_exempt
+@login_required
+def delete_hse_manager(request, manager_id):
+    """
+    Supprimer un manager HSE
+    DELETE: /api/hse/managers/{manager_id}/delete/
+    """
+    # Vérifier l'authentification
+    if not request.user.is_authenticated:
+        return JsonResponse({
+            'success': False,
+            'error': 'Authentification requise'
+        }, status=401)
+    
+    # Vérifier que l'utilisateur est manager ou staff
+    is_manager_or_staff = False
+    if hasattr(request.user, 'user_type'):
+        is_manager_or_staff = request.user.user_type == 'manager'
+    if not is_manager_or_staff:
+        try:
+            is_manager_or_staff = request.user.is_manager
+        except:
+            pass
+    
+    if not is_manager_or_staff and not request.user.is_staff:
+        return JsonResponse({
+            'success': False,
+            'error': 'Accès non autorisé. Seuls les managers peuvent supprimer des managers.'
+        }, status=403)
+    
+    if request.method == 'DELETE':
+        try:
+            manager = HSEManager.objects.get(id=manager_id)
+            manager_name = manager.full_name
+            manager.delete()
+            
+            return JsonResponse({
+                'success': True,
+                'message': f'Manager {manager_name} supprimé avec succès'
+            })
+            
+        except HSEManager.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': 'Manager non trouvé'
+            }, status=404)
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Erreur suppression manager: {str(e)}")
+            return JsonResponse({
+                'success': False,
+                'error': f'Erreur suppression: {str(e)}'
             }, status=500)
     
     return JsonResponse({
